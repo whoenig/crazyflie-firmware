@@ -64,11 +64,11 @@ else:
     else:
         version['tag'] = ""
 
-    try:
-        version['local_revision'].index('+')
-        version['modified'] = 'true'
-    except Exception:
-        version['modified'] = 'false'
+try:
+    version['local_revision'].index('+')
+    version['modified'] = 'true'
+except Exception:
+    version['modified'] = 'false'
 
 #Apply information to the file template
 infile  = open(sys.argv[1], 'r')
