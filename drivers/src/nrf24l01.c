@@ -1,6 +1,6 @@
 /*
- *    ||          ____  _ __                           
- * +------+      / __ )(_) /_______________ _____  ___ 
+ *    ||          ____  _ __
+ * +------+      / __ )(_) /_______________ _____  ___
  * | 0xBC |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
  * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
  *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
@@ -33,8 +33,6 @@
 
 #include <stdbool.h>
 #include <string.h>
-
-#include "cfassert.h"
 
 #include "stm32f10x_conf.h"
 #include "stm32f10x_rcc.h"
@@ -230,7 +228,7 @@ unsigned char nrfRxLength(unsigned int pipe)
 unsigned char nrfActivate()
 {
   unsigned char status;
-  
+
   RADIO_EN_CS();
   status = spiSendByte(CMD_ACTIVATE);
   spiSendByte(ACTIVATE_DATA);
@@ -244,8 +242,6 @@ unsigned char nrfWriteAck(unsigned int pipe, char *buffer, int len)
 {
   unsigned char status;
   int i;
-
-  ASSERT(pipe<6);
 
   RADIO_EN_CS();
 
@@ -313,14 +309,12 @@ void nrfSetDatarate(int datarate)
     case RADIO_RATE_2M:
       nrfWrite1Reg(REG_RF_SETUP, VAL_RF_SETUP_2M);
       break;
-  }  
+  }
 }
 
 void nrfSetAddress(unsigned int pipe, char* address)
 {
   int len = 5;
-
-  ASSERT(pipe<6);
 
   if (pipe > 1)
     len = 1;
@@ -333,7 +327,7 @@ void nrfSetEnable(bool enable)
   if (enable)
   {
     RADIO_EN_CE();
-  } 
+  }
   else
   {
     RADIO_DIS_CE();
@@ -359,7 +353,7 @@ void nrfInit(void)
   extiInit();
 
   /* Enable SPI and GPIO clocks */
-  RCC_APB2PeriphClockCmd(RADIO_GPIO_SPI_CLK | RADIO_GPIO_CS_PERIF | 
+  RCC_APB2PeriphClockCmd(RADIO_GPIO_SPI_CLK | RADIO_GPIO_CS_PERIF |
                          RADIO_GPIO_CE_PERIF | RADIO_GPIO_IRQ_PERIF, ENABLE);
 
   /* Enable SPI and GPIO clocks */
@@ -428,7 +422,7 @@ void nrfInit(void)
 
   /* Enable the SPI  */
   SPI_Cmd(RADIO_SPI, ENABLE);
-  
+
   isInit = true;
 }
 

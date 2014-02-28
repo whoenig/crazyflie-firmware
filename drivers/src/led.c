@@ -1,6 +1,6 @@
 /**
- *    ||          ____  _ __                           
- * +------+      / __ )(_) /_______________ _____  ___ 
+ *    ||          ____  _ __
+ * +------+      / __ )(_) /_______________ _____  ___
  * | 0xBC |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
  * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
  *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
@@ -25,27 +25,21 @@
  */
 #include "led.h"
 
-#include "motors.h"
-
 #include <stdbool.h>
 #include "stm32f10x_conf.h"
-
-/*FreeRtos includes*/
-#include "FreeRTOS.h"
-#include "task.h"
 
 static bool isInit=false;
 
 static GPIO_TypeDef* led_port[] = {
-  [LED_GREEN] = LED_GPIO_PORT, 
+  [LED_GREEN] = LED_GPIO_PORT,
   [LED_RED] = LED_GPIO_PORT,
 };
 static unsigned int led_pin[] = {
-  [LED_GREEN] = LED_GPIO_GREEN, 
+  [LED_GREEN] = LED_GPIO_GREEN,
   [LED_RED]   = LED_GPIO_RED,
 };
 static int led_polarity[] = {
-  [LED_GREEN] = LED_POL_GREEN, 
+  [LED_GREEN] = LED_POL_GREEN,
   [LED_RED] = LED_POL_RED,
 };
 
@@ -73,7 +67,7 @@ void ledInit()
   //Turn off the LED:s
   ledSet(LED_GREEN, 0);
   ledSet(LED_RED, 0);
-  
+
   isInit = true;
 }
 
@@ -89,32 +83,10 @@ void ledSet(led_t led, bool value) {
 
   if (led_polarity[led]==LED_POL_NEG)
     value = !value;
-  
+
   if(value)
     GPIO_SetBits(led_port[led], led_pin[led]);
   else
-    GPIO_ResetBits(led_port[led], led_pin[led]); 
+    GPIO_ResetBits(led_port[led], led_pin[led]);
 
-#ifdef MOTORS_TEST    
-  if(led == LED_RED) {
-    static int step = 0;
-    
-    if(!value)
-    {
-      motorsSetRatio(step, 0x3FFF);
-      
-      step++;
-      if(step>3) step=0;
-    }
-    else
-    {
-      motorsSetRatio(0, 0x0000);
-      motorsSetRatio(1, 0x0000);
-      motorsSetRatio(2, 0x0000);
-      motorsSetRatio(3, 0x0000);
-    }
-  }
-#endif
 }
-
-

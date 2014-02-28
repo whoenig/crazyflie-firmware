@@ -1,6 +1,6 @@
 /**
- *    ||          ____  _ __                           
- * +------+      / __ )(_) /_______________ _____  ___ 
+ *    ||          ____  _ __
+ * +------+      / __ )(_) /_______________ _____  ___
  * | 0xBC |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
  * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
  *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
@@ -53,9 +53,5 @@ bool ledTest();
 void ledSet(led_t led, bool value);
 
 void ledTask(void *param);
-
-//Legacy functions
-#define ledSetRed(VALUE) ledSet(LED_RED, VALUE)
-#define ledSetGreen(VALUE) ledSet(LED_GREEN, VALUE)
 
 #endif

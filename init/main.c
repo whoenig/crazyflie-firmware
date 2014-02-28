@@ -1,6 +1,6 @@
 /**
- *    ||          ____  _ __                           
- * +------+      / __ )(_) /_______________ _____  ___ 
+ *    ||          ____  _ __
+ * +------+      / __ )(_) /_______________ _____  ___
  * | 0xBC |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
  * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
  *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
@@ -24,44 +24,91 @@
  * main.c - Containing the main function.
  */
 
-/* Personal configs */
-#include "FreeRTOSConfig.h"
-
-/* FreeRtos includes */
-#include "FreeRTOS.h"
-#include "task.h"
-
 /* Project includes */
 #include "config.h"
-#include "system.h"
 #include "nvic.h"
-#include "usec_time.h"
-
 #include "led.h"
+#include "usec_time.h"
 
 /* ST includes */
 #include "stm32f10x.h"
 
 /* Private functions */
 static void prvClockInit(void);
+static void radiolinkInitNRF24L01P(void);
+static void delay(uint32_t us);
 
-int main() 
+int main()
 {
   //Low level init: Clock and Interrupt controller
   prvClockInit();
   nvicInit();
+  ledInit();
   initUsecTimer();
 
-  //Launch the system task that will initialize and start everything
-  systemLaunch();
+  nrfInit();
+  radiolinkInitNRF24L01P();
+  nrfSetEnable(true);
 
-  //Start the FreeRTOS scheduler
-  vTaskStartScheduler();
+  uint8_t dataLen;
+  uint8_t data[32];
 
-  //Should never reach this point!
-  while(1);
+  while(true)
+  {
+    ledSet(LED_GREEN, 1);
+
+    while( nrfRead1Reg(REG_FIFO_STATUS)&0x01 );
+    ledSet(LED_RED, 1);
+    dataLen = nrfRxLength(0);
+    if (dataLen>32)          //If a packet has a wrong size it is dropped
+      nrfFlushRx();
+    else                     //Else, it is processed
+    {
+      //Fetch the data
+      nrfReadRX((char *)data, dataLen);
+      while( (nrfRead1Reg(REG_FIFO_STATUS)&0x20) );
+      nrfWriteAck(0, (char*)data, dataLen);
+    }
+    ledSet(LED_RED, 0);
+  }
 
   return 0;
+}
+
+static void delay(uint32_t us)
+{
+  uint64_t endTime = usecTimestamp() + us;
+  while (usecTimestamp() < endTime);
+}
+
+static void radiolinkInitNRF24L01P(void)
+{
+  int i;
+  char radioAddress[5] = {0xE7, 0xE7, 0xE7, 0xE7, 0xE7};
+
+  //Set the radio channel
+  nrfSetChannel(80);
+  //Set the radio data rate
+  nrfSetDatarate(VAL_RF_SETUP_2M);
+  //Set radio address
+  nrfSetAddress(0, radioAddress);
+
+  //Power the radio, Enable the DS interruption, set the radio in PRX mode
+  nrfWrite1Reg(REG_CONFIG, 0x3F);
+
+  // Wait for the chip to be ready
+  delay(2000);
+
+  // Enable the dynamic payload size and the ack payload for the pipe 0
+  nrfWrite1Reg(REG_FEATURE, 0x06);
+  nrfWrite1Reg(REG_DYNPD, 0x01);
+
+  //Flush RX
+  for(i=0;i<3;i++)
+    nrfFlushRx();
+  //Flush TX
+  for(i=0;i<3;i++)
+    nrfFlushTx();
 }
 
 //Clock configuration
@@ -110,19 +157,7 @@ static void prvClockInit(void)
     /* Wait till PLL is used as system clock source */
     while(RCC_GetSYSCLKSource() != 0x08);
   } else {
-      GPIO_InitTypeDef GPIO_InitStructure;
-  
-    //Cannot start the main oscillator: red/green LED of death...
-    GPIO_InitStructure.GPIO_Pin = LED_GPIO_RED | LED_GPIO_GREEN;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
-
-    GPIO_Init(GPIOB, &GPIO_InitStructure);
-    
-    GPIO_ResetBits(GPIOB, LED_RED);
-    GPIO_ResetBits(GPIOB, LED_GREEN);
-
     //Cannot start xtal oscillator!
-    while(1); 
+    while(1);
   }
 }
