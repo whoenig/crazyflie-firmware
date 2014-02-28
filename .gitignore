@@ -10,3 +10,4 @@ bin/*
 config.mk
 cflie.*
 version.c
+__pycache__
