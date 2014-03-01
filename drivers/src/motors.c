@@ -1,6 +1,6 @@
 /**
- *    ||          ____  _ __                           
- * +------+      / __ )(_) /_______________ _____  ___ 
+ *    ||          ____  _ __
+ * +------+      / __ )(_) /_______________ _____  ___
  * | 0xBC |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
  * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
  *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
@@ -57,6 +57,16 @@
 /* Utils Conversion macro */
 #define C_BITS_TO_16(X) ((X)<<(16-MOTORS_PWM_BITS))
 #define C_16_TO_BITS(X) ((X)>>(16-MOTORS_PWM_BITS)&((1<<MOTORS_PWM_BITS)-1))
+
+//The following defines gives a PWM of 9 bits at ~140KHz for a sysclock of 72MHz
+#define MOTORS_PWM_BITS     9
+#define MOTORS_PWM_PERIOD   ((1<<MOTORS_PWM_BITS) - 1)
+#define MOTORS_PWM_PRESCALE 0
+
+// Test defines
+#define MOTORS_TEST_RATIO         (uint16_t)(0.5*(1<<16))
+#define MOTORS_TEST_ON_TIME_MS    10
+#define MOTORS_TEST_DELAY_TIME_MS 50
 
 const int MOTORS[] = { MOTOR_M1, MOTOR_M2, MOTOR_M3, MOTOR_M4 };
 static bool isInit = false;
@@ -129,27 +139,11 @@ void motorsInit()
   // Halt timer during debug halt.
   DBGMCU_Config(MOTORS_GPIO_TIM_M1_2_DBG, ENABLE);
   DBGMCU_Config(MOTORS_GPIO_TIM_M3_4_DBG, ENABLE);
-  
+
   isInit = true;
 }
 
-bool motorsTest(void)
-{
-  int i;
-
-  for (i = 0; i < sizeof(MOTORS) / sizeof(*MOTORS); i++)
-  {
-    motorsSetRatio(MOTORS[i], MOTORS_TEST_RATIO);
-    vTaskDelay(M2T(MOTORS_TEST_ON_TIME_MS));
-    motorsSetRatio(MOTORS[i], 0);
-    vTaskDelay(M2T(MOTORS_TEST_DELAY_TIME_MS));
-  }
-
-  return isInit;
-}
-
-
-void motorsSetRatio(int id, uint16_t ratio)
+void motorsSetRatio(motorId id, uint16_t ratio)
 {
   switch(id)
   {
@@ -168,7 +162,7 @@ void motorsSetRatio(int id, uint16_t ratio)
   }
 }
 
-int motorsGetRatio(int id)
+int motorsGetRatio(motorId id)
 {
   switch(id)
   {
@@ -184,59 +178,3 @@ int motorsGetRatio(int id)
 
   return -1;
 }
-
-#ifdef MOTOR_RAMPUP_TEST
-// FreeRTOS Task to test the Motors driver with a rampup of each motor alone.
-void motorsTestTask(void* params)
-{
-  int step=0;
-  float rampup = 0.01;
-
-  motorsSetupMinMaxPos();
-  motorsSetRatio(MOTOR_M4, 1*(1<<16) * 0.0);
-  motorsSetRatio(MOTOR_M3, 1*(1<<16) * 0.0);
-  motorsSetRatio(MOTOR_M2, 1*(1<<16) * 0.0);
-  motorsSetRatio(MOTOR_M1, 1*(1<<16) * 0.0);
-  vTaskDelay(M2T(1000));
-
-  while(1)
-  {
-    vTaskDelay(M2T(100));
-
-    motorsSetRatio(MOTOR_M4, 1*(1<<16) * rampup);
-    motorsSetRatio(MOTOR_M3, 1*(1<<16) * rampup);
-    motorsSetRatio(MOTOR_M2, 1*(1<<16) * rampup);
-    motorsSetRatio(MOTOR_M1, 1*(1<<16) * rampup);
-
-    rampup += 0.001;
-    if (rampup >= 0.1)
-    {
-      if(++step>3) step=0;
-      rampup = 0.01;
-    }
-  }
-}
-#else
-// FreeRTOS Task to test the Motors driver
-void motorsTestTask(void* params)
-{
-  static const int sequence[] = {0.1*(1<<16), 0.15*(1<<16), 0.2*(1<<16), 0.25*(1<<16)};
-  int step=0;
-
-  //Wait 3 seconds before starting the motors
-  vTaskDelay(M2T(3000));
-
-  while(1)
-  {
-    motorsSetRatio(MOTOR_M4, sequence[step%4]);
-    motorsSetRatio(MOTOR_M3, sequence[(step+1)%4]);
-    motorsSetRatio(MOTOR_M2, sequence[(step+2)%4]);
-    motorsSetRatio(MOTOR_M1, sequence[(step+3)%4]);
-
-    if(++step>3) step=0;
-
-    vTaskDelay(M2T(1000));
-  }
-}
-#endif
-

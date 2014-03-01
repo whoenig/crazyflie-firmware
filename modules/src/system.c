@@ -32,6 +32,7 @@
 
 #include "system.h"
 #include "radiolink.h"
+#include "motors.h"
 
 /* Private functions */
 static void systemTask(void *arg);
@@ -52,6 +53,7 @@ bool systemTest()
 static void systemTask(void *arg)
 {
   radiolinkInit();
+  motorsInit();
   radiolinkSetEnable(true);
   RadioPacket packet;
 
@@ -59,6 +61,21 @@ static void systemTask(void *arg)
   {
     radiolinkReceivePacket(&packet);
     radiolinkSendPacket(&packet);
+    if (packet.size == 4 * sizeof(uint16_t))
+    {
+      struct data
+      {
+        uint16_t m1;
+        uint16_t m2;
+        uint16_t m3;
+        uint16_t m4;
+      };
+      struct data* d = (struct data*)packet.data;
+      motorsSetRatio(MOTOR_M1, d->m1);
+      motorsSetRatio(MOTOR_M2, d->m2);
+      motorsSetRatio(MOTOR_M3, d->m3);
+      motorsSetRatio(MOTOR_M4, d->m4);
+    }
   }
 
   //Should never reach this point!

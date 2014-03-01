@@ -1,6 +1,6 @@
 /**
- *    ||          ____  _ __                           
- * +------+      / __ )(_) /_______________ _____  ___ 
+ *    ||          ____  _ __
+ * +------+      / __ )(_) /_______________ _____  ___
  * | 0xBC |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
  * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
  *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
@@ -35,28 +35,16 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "config.h"
-
-/******** Defines ********/
-
-//The following defines gives a PWM of 9 bits at ~140KHz for a sysclock of 72MHz
-#define MOTORS_PWM_BITS     9
-#define MOTORS_PWM_PERIOD   ((1<<MOTORS_PWM_BITS) - 1)
-#define MOTORS_PWM_PRESCALE 0
-
-
-// Motors IDs define
-#define MOTOR_M1  0
-#define MOTOR_M2  1
-#define MOTOR_M3  2
-#define MOTOR_M4  3
-
-// Test defines
-#define MOTORS_TEST_RATIO         (uint16_t)(0.5*(1<<16))
-#define MOTORS_TEST_ON_TIME_MS    10
-#define MOTORS_TEST_DELAY_TIME_MS 50
 
 /*** Public interface ***/
+
+typedef enum
+{
+  MOTOR_M1,
+  MOTOR_M2,
+  MOTOR_M3,
+  MOTOR_M4,
+} motorId;
 
 /**
  * Initialisation. Will set all motors ratio to 0%
@@ -64,25 +52,13 @@
 void motorsInit();
 
 /**
- * Test of the motor modules. The test will spin each motor very short in
- * the sequence M1 to M4.
- */
-bool motorsTest(void);
-
-/**
  * Set the PWM ratio of the motor 'id'
  */
-void motorsSetRatio(int id, uint16_t ratio);
+void motorsSetRatio(motorId id, uint16_t ratio);
 
 /**
  * Get the PWM ratio of the motor 'id'. Return -1 if wrong ID.
  */
-int motorsGetRatio(int id);
-
-/**
- * FreeRTOS Task to test the Motors driver
- */
-void motorsTestTask(void* params);
+int motorsGetRatio(motorId id);
 
 #endif /* __MOTORS_H__ */
-

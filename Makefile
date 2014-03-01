@@ -56,10 +56,15 @@ VPATH += init hal/src modules/src utils/src drivers/src
 PROJ_OBJ = main.o
 
 # Drivers
-PROJ_OBJ += led.o nrf24l01.o exti.o nvic.o
+PROJ_OBJ += led.o
+PROJ_OBJ += nrf24l01.o
+PROJ_OBJ += exti.o
+PROJ_OBJ += nvic.o
+PROJ_OBJ += motors.o
 
 # Hal
-PROJ_OBJ += usec_time.o radiolink.o
+PROJ_OBJ += usec_time.o
+PROJ_OBJ += radiolink.o
 
 # Modules
 PROJ_OBJ += system.o
