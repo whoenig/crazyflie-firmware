@@ -98,6 +98,14 @@
 static bool isInit;
 static void (*interruptCb)(void) = NULL;
 
+/* Low level reg access
+ */
+static unsigned char nrfReadReg(unsigned char address, char *buffer, int len);
+static unsigned char nrfRead1Reg(unsigned char address);
+static unsigned char nrfWriteReg(unsigned char address, char *buffer, int len);
+static unsigned char nrfWrite1Reg(unsigned char address, char byte);
+
+
 /***********************
  * SPI private methods *
  ***********************/
@@ -126,7 +134,7 @@ static char spiReceiveByte()
  ****************************************************************/
 
 /* Read len bytes from a nRF24L register. 5 Bytes max */
-unsigned char nrfReadReg(unsigned char address, char *buffer, int len)
+static unsigned char nrfReadReg(unsigned char address, char *buffer, int len)
 {
   unsigned char status;
   int i;
@@ -145,7 +153,7 @@ unsigned char nrfReadReg(unsigned char address, char *buffer, int len)
 }
 
 /* Write len bytes a nRF24L register. 5 Bytes max */
-unsigned char nrfWriteReg(unsigned char address, char *buffer, int len)
+static unsigned char nrfWriteReg(unsigned char address, char *buffer, int len)
 {
   unsigned char status;
   int i;
@@ -164,13 +172,14 @@ unsigned char nrfWriteReg(unsigned char address, char *buffer, int len)
 }
 
 /* Write only one byte (useful for most of the reg.) */
-unsigned char nrfWrite1Reg(unsigned char address, char byte)
+static unsigned char nrfWrite1Reg(unsigned char address, char byte)
 {
   return nrfWriteReg(address, &byte, 1);
 }
 
 /* Read only one byte (useful for most of the reg.) */
-unsigned char nrfRead1Reg(unsigned char address) {
+static unsigned char nrfRead1Reg(unsigned char address)
+{
   char byte;
 
   nrfReadReg(address, &byte, 1);
@@ -296,20 +305,9 @@ void nrfSetChannel(unsigned int channel)
     nrfWrite1Reg(REG_RF_CH, channel);
 }
 
-void nrfSetDatarate(int datarate)
+void nrfSetDatarate(nrfDatarate_t datarate)
 {
-  switch(datarate)
-  {
-    case RADIO_RATE_250K:
-      nrfWrite1Reg(REG_RF_SETUP, VAL_RF_SETUP_250K);
-      break;
-    case RADIO_RATE_1M:
-      nrfWrite1Reg(REG_RF_SETUP, VAL_RF_SETUP_1M);
-      break;
-    case RADIO_RATE_2M:
-      nrfWrite1Reg(REG_RF_SETUP, VAL_RF_SETUP_2M);
-      break;
-  }
+  nrfWrite1Reg(REG_RF_SETUP, datarate);
 }
 
 void nrfSetAddress(unsigned int pipe, char* address)
@@ -320,6 +318,11 @@ void nrfSetAddress(unsigned int pipe, char* address)
     len = 1;
 
   nrfWriteReg(REG_RX_ADDR_P0 + pipe, address, len);
+}
+
+void nrfSetConfig(uint8_t config)
+{
+  nrfWrite1Reg(REG_CONFIG, config);
 }
 
 void nrfSetEnable(bool enable)
@@ -337,6 +340,36 @@ void nrfSetEnable(bool enable)
 unsigned char nrfGetStatus()
 {
   return nrfNop();
+}
+
+bool nrfIsRxFull()
+{
+  return nrfRead1Reg(REG_FIFO_STATUS) & FIFO_STATUS_RX_FULL;
+}
+
+bool nrfIsRxEmpty()
+{
+  return nrfRead1Reg(REG_FIFO_STATUS) & FIFO_STATUS_RX_EMPTY;
+}
+
+bool nrfIsTxFull()
+{
+  return nrfRead1Reg(REG_FIFO_STATUS) & FIFO_STATUS_TX_FULL;
+}
+
+bool nrfIsTxEmpty()
+{
+  return nrfRead1Reg(REG_FIFO_STATUS) & FIFO_STATUS_TX_EMPTY;
+}
+
+void nrfEnableDynamicPayload(uint8_t pipeMask)
+{
+  nrfWrite1Reg(REG_DYNPD, pipeMask);
+}
+
+void nrfSetFeature(uint8_t features)
+{
+  nrfWrite1Reg(REG_FEATURE, features);
 }
 
 /* Initialisation */

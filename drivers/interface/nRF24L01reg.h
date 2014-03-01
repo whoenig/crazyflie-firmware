@@ -1,6 +1,6 @@
 /**
- *    ||          ____  _ __                           
- * +------+      / __ )(_) /_______________ _____  ___ 
+ *    ||          ____  _ __
+ * +------+      / __ )(_) /_______________ _____  ___
  * | 0xBC |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
  * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
  *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
@@ -51,17 +51,15 @@
 #define REG_RX_PW_P4 0x15
 #define REG_RX_PW_P5 0x16
 #define REG_FIFO_STATUS 0x17
+#define FIFO_STATUS_RX_EMPTY (1<<0)
+#define FIFO_STATUS_RX_FULL  (1<<1)
+#define FIFO_STATUS_TX_EMPTY (1<<4)
+#define FIFO_STATUS_TX_FULL  (1<<5)
 #define REG_DYNPD 0x1C
 #define REG_FEATURE 0x1D
-
-#define VAL_RF_SETUP_250K 0x26
-#define VAL_RF_SETUP_1M   0x06
-#define VAL_RF_SETUP_2M   0x0E
 
 #define VAL_SETUP_AW_3B 1
 #define VAL_SETUP_AW_4B 2
 #define VAL_SETUP_AW_5B 3
 
-
 #endif /* __NRF24L01REG_H__ */
-

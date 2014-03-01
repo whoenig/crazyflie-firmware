@@ -28,30 +28,11 @@
 
 #include <stdbool.h>
 
-#include "stm32f10x_conf.h"
-
-//Led polarity configuration constant
-#define LED_POL_POS 0
-#define LED_POL_NEG 1
-
-//Hardware configuration
-#define LED_GPIO_PERIF   RCC_APB2Periph_GPIOB
-#define LED_GPIO_PORT    GPIOB
-#define LED_GPIO_GREEN   GPIO_Pin_5
-#define LED_POL_GREEN    LED_POL_NEG
-#define LED_GPIO_RED     GPIO_Pin_4
-#define LED_POL_RED      LED_POL_NEG
-
-#define LED_NUM 2
-
-typedef enum {LED_RED=0, LED_GREEN} led_t;
+typedef enum{LED_RED=0, LED_GREEN} led_t;
 
 void ledInit();
-bool ledTest();
 
 // Procedures to set the status of the LEDs
 void ledSet(led_t led, bool value);
-
-void ledTask(void *param);
 
 #endif

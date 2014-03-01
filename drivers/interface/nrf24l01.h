@@ -1,6 +1,6 @@
 /*
- *    ||          ____  _ __                           
- * +------+      / __ )(_) /_______________ _____  ___ 
+ *    ||          ____  _ __
+ * +------+      / __ )(_) /_______________ _____  ___
  * | 0xBC |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
  * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
  *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
@@ -29,8 +29,6 @@
 
 #include <stdbool.h>
 
-#include "nRF24L01reg.h"
-
 // Init and test of the connection to the chip
 void nrfInit(void);
 bool nrfTest(void);
@@ -38,18 +36,14 @@ bool nrfTest(void);
 // Interrupt routine
 void nrfIsr();
 
-/*** Defines ***/
-#define RADIO_RATE_250K 0
-#define RADIO_RATE_1M 1
-#define RADIO_RATE_2M 2
+typedef enum {
+  NRF_DATARATE_250K = 0x26,
+  NRF_DATARATE_1M   = 0x06,
+  NRF_DATARATE_2M   = 0x0E
+} nrfDatarate_t;
 
-/* Low level reg access
- * FIXME: the user should not need to access raw registers...
- */
-unsigned char nrfReadReg(unsigned char address, char *buffer, int len);
-unsigned char nrfRead1Reg(unsigned char address);
-unsigned char nrfWriteReg(unsigned char address, char *buffer, int len);
-unsigned char nrfWrite1Reg(unsigned char address, char byte);
+#define NRF_FEATURE_EN_DPL     (1<<2)
+#define NRF_FEATURE_EN_ACK_PAY (1<<1)
 
 //Interrupt access
 void nrfSetInterruptCallback(void (*cb)(void));
@@ -63,10 +57,16 @@ unsigned char nrfActivate();
 unsigned char nrfWriteAck(unsigned int pipe, char *buffer, int len);
 unsigned char nrfReadRX(char *buffer, int len);
 void nrfSetChannel(unsigned int channel);
-void nrfSetDatarate(int datarate);
+void nrfSetDatarate(nrfDatarate_t datarate);
 void nrfSetAddress(unsigned int pipe, char* address);
 void nrfSetEnable(bool enable);
 unsigned char nrfGetStatus();
-
+bool nrfIsRxFull();
+bool nrfIsRxEmpty();
+bool nrfIsTxFull();
+bool nrfIsTxEmpty();
+void nrfSetConfig(uint8_t config);
+void nrfEnableDynamicPayload(uint8_t pipeMask);
+void nrfSetFeature(uint8_t features);
 
 #endif

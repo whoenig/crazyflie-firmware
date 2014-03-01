@@ -57,7 +57,7 @@ int main()
   {
     ledSet(LED_GREEN, 1);
 
-    while( nrfRead1Reg(REG_FIFO_STATUS)&0x01 );
+    while(nrfIsRxFull());
     ledSet(LED_RED, 1);
     dataLen = nrfRxLength(0);
     if (dataLen>32)          //If a packet has a wrong size it is dropped
@@ -66,7 +66,7 @@ int main()
     {
       //Fetch the data
       nrfReadRX((char *)data, dataLen);
-      while( (nrfRead1Reg(REG_FIFO_STATUS)&0x20) );
+      while(nrfIsTxFull());
       nrfWriteAck(0, (char*)data, dataLen);
     }
     ledSet(LED_RED, 0);
@@ -89,19 +89,19 @@ static void radiolinkInitNRF24L01P(void)
   //Set the radio channel
   nrfSetChannel(80);
   //Set the radio data rate
-  nrfSetDatarate(VAL_RF_SETUP_2M);
+  nrfSetDatarate(NRF_DATARATE_2M);
   //Set radio address
   nrfSetAddress(0, radioAddress);
 
   //Power the radio, Enable the DS interruption, set the radio in PRX mode
-  nrfWrite1Reg(REG_CONFIG, 0x3F);
+  nrfSetConfig(0x3F);
 
   // Wait for the chip to be ready
   delay(2000);
 
   // Enable the dynamic payload size and the ack payload for the pipe 0
-  nrfWrite1Reg(REG_FEATURE, 0x06);
-  nrfWrite1Reg(REG_DYNPD, 0x01);
+  nrfSetFeature(NRF_FEATURE_EN_DPL | NRF_FEATURE_EN_ACK_PAY);
+  nrfEnableDynamicPayload(0x01);
 
   //Flush RX
   for(i=0;i<3;i++)
