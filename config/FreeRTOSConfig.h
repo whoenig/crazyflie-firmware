@@ -78,7 +78,7 @@
 #define configUSE_16_BIT_TICKS		0
 #define configIDLE_SHOULD_YIELD		0
 #define configUSE_CO_ROUTINES 		0
-#define configCHECK_FOR_STACK_OVERFLOW      1
+#define configCHECK_FOR_STACK_OVERFLOW      0
 #define configUSE_TIMERS          1
 #define configTIMER_TASK_PRIORITY 1
 #define configTIMER_QUEUE_LENGTH  20
@@ -122,10 +122,6 @@ to exclude the API function. */
 #define TASK_ADC_ID_NBR         4
 #define TASK_PM_ID_NBR          5
 
-#define traceTASK_SWITCHED_IN() \
-  { \
-    extern void debugSendTraceInfo(unsigned int taskNbr); \
-    debugSendTraceInfo((int)pxCurrentTCB->pxTaskTag); \
-  }
+#define traceTASK_SWITCHED_IN()
 
 #endif /* FREERTOS_CONFIG_H */

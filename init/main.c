@@ -24,10 +24,17 @@
  * main.c - Containing the main function.
  */
 
+/* Personal configs */
+#include "FreeRTOSConfig.h"
+
+/* FreeRtos includes */
+#include "FreeRTOS.h"
+#include "task.h"
+
 /* Project includes */
 #include "config.h"
+#include "system.h"
 #include "nvic.h"
-#include "led.h"
 #include "usec_time.h"
 
 /* ST includes */
@@ -35,80 +42,24 @@
 
 /* Private functions */
 static void prvClockInit(void);
-static void radiolinkInitNRF24L01P(void);
-static void delay(uint32_t us);
 
 int main()
 {
   //Low level init: Clock and Interrupt controller
   prvClockInit();
   nvicInit();
-  ledInit();
   initUsecTimer();
 
-  nrfInit();
-  radiolinkInitNRF24L01P();
-  nrfSetEnable(true);
+  //Launch the system task that will initialize and start everything
+  systemLaunch();
 
-  uint8_t dataLen;
-  uint8_t data[32];
+  //Start the FreeRTOS scheduler
+  vTaskStartScheduler();
 
-  while(true)
-  {
-    ledSet(LED_GREEN, 1);
-
-    while(nrfIsRxFull());
-    ledSet(LED_RED, 1);
-    dataLen = nrfRxLength(0);
-    if (dataLen>32)          //If a packet has a wrong size it is dropped
-      nrfFlushRx();
-    else                     //Else, it is processed
-    {
-      //Fetch the data
-      nrfReadRX((char *)data, dataLen);
-      while(nrfIsTxFull());
-      nrfWriteAck(0, (char*)data, dataLen);
-    }
-    ledSet(LED_RED, 0);
-  }
+  //Should never reach this point!
+  while(1);
 
   return 0;
-}
-
-static void delay(uint32_t us)
-{
-  uint64_t endTime = usecTimestamp() + us;
-  while (usecTimestamp() < endTime);
-}
-
-static void radiolinkInitNRF24L01P(void)
-{
-  int i;
-  char radioAddress[5] = {0xE7, 0xE7, 0xE7, 0xE7, 0xE7};
-
-  //Set the radio channel
-  nrfSetChannel(80);
-  //Set the radio data rate
-  nrfSetDatarate(NRF_DATARATE_2M);
-  //Set radio address
-  nrfSetAddress(0, radioAddress);
-
-  //Power the radio, Enable the DS interruption, set the radio in PRX mode
-  nrfSetConfig(0x3F);
-
-  // Wait for the chip to be ready
-  delay(2000);
-
-  // Enable the dynamic payload size and the ack payload for the pipe 0
-  nrfSetFeature(NRF_FEATURE_EN_DPL | NRF_FEATURE_EN_ACK_PAY);
-  nrfEnableDynamicPayload(0x01);
-
-  //Flush RX
-  for(i=0;i<3;i++)
-    nrfFlushRx();
-  //Flush TX
-  for(i=0;i<3;i++)
-    nrfFlushTx();
 }
 
 //Clock configuration

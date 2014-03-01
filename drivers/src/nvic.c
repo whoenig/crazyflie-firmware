@@ -32,6 +32,7 @@ void nvicInit(void)
   NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);
 }
 
+#ifdef NVIC_NOT_USED_BY_FREERTOS
 /**
  * @brief  This function handles SysTick Handler.
  */
@@ -52,6 +53,7 @@ void DONT_DISCARD SVC_Handler(void)
 void DONT_DISCARD PendSV_Handler(void)
 {
 }
+#endif
 
 /**
   * @brief  This function handles NMI exception.

@@ -1,6 +1,6 @@
 /*
- *    ||          ____  _ __                           
- * +------+      / __ )(_) /_______________ _____  ___ 
+ *    ||          ____  _ __
+ * +------+      / __ )(_) /_______________ _____  ___
  * | 0xBC |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
  * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
  *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
@@ -21,17 +21,25 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
- * radiolink.c: nRF24L01 implementation of the CRTP link
+ * radiolink.h: nRF24L01 task for communication
  */
 
 #ifndef __RADIOLINK_H__
 #define __RADIOLINK_H__
 
-#include "crtp.h"
+typedef struct
+{
+  uint8_t size;
+  uint8_t data[32];
+} RadioPacket;
 
 void radiolinkInit();
 bool radiolinkTest();
-struct crtpLinkOperations * radiolinkGetLink();
-void radiolinkReInit(void);
+
+int radiolinkSetEnable(bool enable);
+int radiolinkSendPacket(RadioPacket* pk);
+int radiolinkReceivePacket(RadioPacket* pk);
+int radiolinkReset(void);
+bool radiolinkIsConnected(void);
 
 #endif

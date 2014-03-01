@@ -23,7 +23,11 @@ CLOAD_SCRIPT      ?= ../crazyflie-clients-python/bin/cfloader
 
 REV               ?= E
 
+#OpenOCD conf
+RTOS_DEBUG        ?= 0
+
 ############### Location configuration ################
+FREERTOS = lib/FreeRTOS
 PORT = $(FREERTOS)/portable/GCC/ARM_CM3
 STLIB = lib/
 
@@ -33,6 +37,15 @@ VPATH += $(STLIB)/CMSIS/Core/CM3/startup/gcc
 CRT0=startup_stm32f10x_md.o
 
 include scripts/st_obj.mk
+
+# FreeRTOS
+VPATH += $(PORT)
+PORT_OBJ=port.o
+VPATH +=  $(FREERTOS)/portable/MemMang
+MEMMANG_OBJ = heap_4.o
+
+VPATH += $(FREERTOS)
+FREERTOS_OBJ = list.o tasks.o queue.o timers.o $(MEMMANG_OBJ)
 
 # Crazyflie
 VPATH += init hal/src modules/src utils/src drivers/src
@@ -46,9 +59,13 @@ PROJ_OBJ = main.o
 PROJ_OBJ += led.o nrf24l01.o exti.o nvic.o
 
 # Hal
-PROJ_OBJ += usec_time.o
+PROJ_OBJ += usec_time.o radiolink.o
 
-OBJ = $(CRT0) $(PORT_OBJ) $(ST_OBJ) $(PROJ_OBJ)
+# Modules
+PROJ_OBJ += system.o
+
+
+OBJ = $(CRT0) $(FREERTOS_OBJ) $(PORT_OBJ) $(ST_OBJ) $(PROJ_OBJ)
 
 ifdef P
   C_PROFILE = -D P_$(P)
@@ -61,10 +78,10 @@ LD = $(CROSS_COMPILE)gcc
 SIZE = $(CROSS_COMPILE)size
 OBJCOPY = $(CROSS_COMPILE)objcopy
 
-INCLUDES = -I$(PORT) -I.
+INCLUDES = -I$(FREERTOS)/include -I$(PORT) -I.
 INCLUDES+= -I$(STLIB)/STM32F10x_StdPeriph_Driver/inc
 INCLUDES+= -I$(STLIB)/CMSIS/Core/CM3
-INCLUDES+= -Iconfig -Ihal/interface
+INCLUDES+= -Iconfig -Ihal/interface -Imodules/interface
 INCLUDES+= -Iutils/interface -Idrivers/interface
 
 PROCESSOR = -mcpu=cortex-m3 -mthumb

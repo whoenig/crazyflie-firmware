@@ -372,6 +372,11 @@ void nrfSetFeature(uint8_t features)
   nrfWrite1Reg(REG_FEATURE, features);
 }
 
+void nrfClearRxDataReady()
+{
+  nrfWrite1Reg(REG_STATUS, 0x70);
+}
+
 /* Initialisation */
 void nrfInit(void)
 {

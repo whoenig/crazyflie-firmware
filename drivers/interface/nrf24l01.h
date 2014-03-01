@@ -68,5 +68,6 @@ bool nrfIsTxEmpty();
 void nrfSetConfig(uint8_t config);
 void nrfEnableDynamicPayload(uint8_t pipeMask);
 void nrfSetFeature(uint8_t features);
+void nrfClearRxDataReady();
 
 #endif

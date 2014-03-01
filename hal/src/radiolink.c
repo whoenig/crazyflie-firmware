@@ -1,6 +1,6 @@
 /*
- *    ||          ____  _ __                           
- * +------+      / __ )(_) /_______________ _____  ___ 
+ *    ||          ____  _ __
+ * +------+      / __ )(_) /_______________ _____  ___
  * | 0xBC |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
  * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
  *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
@@ -27,10 +27,8 @@
 #include <stdbool.h>
 #include <errno.h>
 
+#include "radiolink.h"
 #include "nrf24l01.h"
-#include "crtp.h"
-#include "configblock.h"
-#include "ledseq.h"
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -49,16 +47,6 @@ xQueueHandle rxQueue;
 
 static uint32_t lastPacketTick;
 
-//Union used to efficiently handle the packets (Private type)
-typedef union
-{
-  CRTPPacket crtp;
-  struct {
-    uint8_t size;
-    uint8_t data[32];
-  } __attribute__((packed)) raw;
-} RadioPacket;
-
 static struct {
   bool enabled;
 } state;
@@ -75,7 +63,7 @@ static void interruptCallback()
 }
 
 // 'Class' functions, called from callbacks
-static int setEnable(bool enable)
+int radiolinkSetEnable(bool enable)
 {
   nrfSetEnable(enable);
   state.enabled = enable;
@@ -83,7 +71,7 @@ static int setEnable(bool enable)
   return 0;
 }
 
-static int sendPacket(CRTPPacket * pk)
+int radiolinkSendPacket(RadioPacket * pk)
 {
   if (!state.enabled)
     return ENETDOWN;
@@ -92,7 +80,7 @@ static int sendPacket(CRTPPacket * pk)
   return 0;
 }
 
-static int receivePacket(CRTPPacket * pk)
+int radiolinkReceivePacket(RadioPacket * pk)
 {
   if (!state.enabled)
     return ENETDOWN;
@@ -102,7 +90,7 @@ static int receivePacket(CRTPPacket * pk)
   return 0;
 }
 
-static int reset(void)
+int radiolinkReset(void)
 {
   xQueueReset(txQueue);
   nrfFlushTx();
@@ -110,22 +98,13 @@ static int reset(void)
   return 0;
 }
 
-static bool isConnected(void)
+bool radiolinkIsConnected(void)
 {
   if ((xTaskGetTickCount() - lastPacketTick) > RADIO_CONNECTED_TIMEOUT)
     return false;
 
   return true;
 }
-
-static struct crtpLinkOperations radioOp =
-{
-  .setEnable         = setEnable,
-  .sendPacket        = sendPacket,
-  .receivePacket     = receivePacket,
-  .isConnected       = isConnected,
-  .reset             = reset,
-};
 
 /* Radio task handles the CRTP packet transfers as well as the radio link
  * specific communications (eg. Scann and ID ports, communication error handling
@@ -139,15 +118,15 @@ static void radiolinkTask(void * arg)
   //Packets handling loop
   while(1)
   {
-    ledseqRun(LED_GREEN, seq_linkup);
+//    ledseqRun(LED_GREEN, seq_linkup);
 
     xSemaphoreTake(dataRdy, portMAX_DELAY);
     lastPacketTick = xTaskGetTickCount();
-    
+
     nrfSetEnable(false);
-    
+
     //Fetch all the data (Loop until the RX Fifo is NOT empty)
-    while( !(nrfRead1Reg(REG_FIFO_STATUS)&0x01) )
+    while( !nrfIsRxEmpty() )
     {
       dataLen = nrfRxLength(0);
 
@@ -156,27 +135,26 @@ static void radiolinkTask(void * arg)
       else                     //Else, it is processed
       {
         //Fetch the data
-        pk.raw.size = dataLen-1;
-        nrfReadRX((char *)pk.raw.data, dataLen);
+        pk.size = dataLen;
+        nrfReadRX((char *)pk.data, dataLen);
 
         //Push it in the queue (If overflow, the packet is dropped)
-        if (!CRTP_IS_NULL_PACKET(pk.crtp))  //Don't follow the NULL packets
-          xQueueSend( rxQueue, &pk, 0);
+        xQueueSend( rxQueue, &pk, 0);
       }
     }
 
     //Push the data to send (Loop until the TX Fifo is full or there is no more data to send)
-    while( (uxQueueMessagesWaiting((xQueueHandle)txQueue) > 0) && !(nrfRead1Reg(REG_FIFO_STATUS)&0x20) )
+    while(   (uxQueueMessagesWaiting((xQueueHandle)txQueue) > 0)
+          && !nrfIsTxFull() )
     {
       xQueueReceive(txQueue, &pk, 0);
-      pk.raw.size++;
 
-      nrfWriteAck(0, (char*) pk.raw.data, pk.raw.size);
+      nrfWriteAck(0, (char*) pk.data, pk.size);
     }
 
     //clear the interruptions flags
-    nrfWrite1Reg(REG_STATUS, 0x70);
-    
+    nrfClearRxDataReady();
+
     //Re-enable the radio
     nrfSetEnable(true);
   }
@@ -188,18 +166,18 @@ static void radiolinkInitNRF24L01P(void)
   char radioAddress[5] = {0xE7, 0xE7, 0xE7, 0xE7, 0xE7};
 
   //Set the radio channel
-  nrfSetChannel(configblockGetRadioChannel());
+  nrfSetChannel(80);
   //Set the radio data rate
-  nrfSetDatarate(configblockGetRadioSpeed());
+  nrfSetDatarate(NRF_DATARATE_2M);
   //Set radio address
   nrfSetAddress(0, radioAddress);
 
   //Power the radio, Enable the DS interruption, set the radio in PRX mode
-  nrfWrite1Reg(REG_CONFIG, 0x3F);
+  nrfSetConfig(0x3F);
   vTaskDelay(M2T(2)); //Wait for the chip to be ready
   // Enable the dynamic payload size and the ack payload for the pipe 0
-  nrfWrite1Reg(REG_FEATURE, 0x06);
-  nrfWrite1Reg(REG_DYNPD, 0x01);
+  nrfSetFeature(NRF_FEATURE_EN_DPL | NRF_FEATURE_EN_ACK_PAY);
+  nrfEnableDynamicPayload(0x01);
 
   //Flush RX
   for(i=0;i<3;i++)
@@ -243,17 +221,4 @@ void radiolinkInit()
 bool radiolinkTest()
 {
   return nrfTest();
-}
-
-struct crtpLinkOperations * radiolinkGetLink()
-{
-  return &radioOp;
-}
-
-void radiolinkReInit(void)
-{
-  if (!isInit)
-    return;
-
-  radiolinkInitNRF24L01P();
 }
