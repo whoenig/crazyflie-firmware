@@ -34,13 +34,10 @@
 #include "stm32f10x_i2c.h"
 
 // Delay is approx 0.2us per loop @64Mhz
+// ToDO: implement *real* delay function
+// ToDo: move me to a non-header file
 #define I2CDEV_LOOPS_PER_US  5
 #define I2CDEV_LOOPS_PER_MS  (1000 * I2CDEV_LOOPS_PER_US)
-
-#define I2CDEV_I2C1_PIN_SDA GPIO_Pin_7
-#define I2CDEV_I2C1_PIN_SCL GPIO_Pin_6
-
-#define I2CDEV_NO_MEM_ADDR  0xFF
 
 /**
  * Read bytes from an I2C peripheral

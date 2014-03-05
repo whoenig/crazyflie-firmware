@@ -36,12 +36,14 @@
 #include "semphr.h"
 #include "task.h"
 
-#include "led.h"
-#include "ledseq.h"
-
 #include "stm32f10x.h"
 
 #include "i2croutines.h"
+
+#define I2CDEV_I2C1_PIN_SDA GPIO_Pin_7
+#define I2CDEV_I2C1_PIN_SCL GPIO_Pin_6
+
+#define I2CDEV_NO_MEM_ADDR  0xFF
 
 #define I2C_TIMEOUT 5
 #define I2CDEV_CLK_TS (1000000 / 100000)
@@ -73,7 +75,7 @@ static inline void i2cdevRuffLoopDelay(uint32_t us);
 int i2cdevInit(I2C_TypeDef *I2Cx)
 {
   NVIC_InitTypeDef NVIC_InitStructure;
-  
+
   if (I2Cx == I2C1)
   {
     i2cdevResetBusI2c1();
@@ -134,7 +136,7 @@ int i2cdevInit(I2C_TypeDef *I2Cx)
   {
     return FALSE;
   }
-  
+
   return TRUE;
 }
 
@@ -149,7 +151,7 @@ bool i2cdevReadBit(I2C_TypeDef *I2Cx, uint8_t devAddress, uint8_t memAddress,
 {
   uint8_t byte;
   bool status;
-  
+
   status = i2cdevRead(I2Cx, devAddress, memAddress, 1, &byte);
   *data = byte & (1 << bitNum);
 

@@ -61,6 +61,9 @@ PROJ_OBJ += nrf24l01.o
 PROJ_OBJ += exti.o
 PROJ_OBJ += nvic.o
 PROJ_OBJ += motors.o
+PROJ_OBJ += i2cdev.o
+PROJ_OBJ += i2croutines.o
+PROJ_OBJ += mpu6050.o
 
 # Hal
 PROJ_OBJ += usec_time.o

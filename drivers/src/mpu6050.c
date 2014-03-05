@@ -33,9 +33,6 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
-// TA: Maybe not so good to bring in these dependencies...
-#include "debug.h"
-#include "eprintf.h"
 #include "i2cdev.h"
 
 #include "mpu6050.h"
@@ -157,7 +154,7 @@ bool mpu6050SelfTest()
       mpu6050EvaluateSelfTest(MPU6050_ST_ACCEL_LOW, MPU6050_ST_ACCEL_HIGH, ayfDiff, "acc Y") &&
       mpu6050EvaluateSelfTest(MPU6050_ST_ACCEL_LOW, MPU6050_ST_ACCEL_HIGH, azfDiff, "acc Z"))
   {
-    DEBUG_PRINT("Self test [OK].\n");
+    testStatus = true;
   }
   else
   {
@@ -178,8 +175,6 @@ bool mpu6050EvaluateSelfTest(float low, float high, float value, char* string)
 {
   if (value < low || value > high)
   {
-    DEBUG_PRINT("Self test %s [FAIL]. low: %0.2f, high: %0.2f, measured: %0.2f\n",
-                string, low, high, value);
     return FALSE;
   }
   return TRUE;
@@ -1131,7 +1126,7 @@ void mpu6050SetMasterClockSpeed(uint8_t speed)
  * operation, and if it is cleared, then it's a write operation. The remaining
  * bits (6-0) are the 7-bit device address of the slave device.
  *
- * In read mode, the result of the read is placed in the lowest available 
+ * In read mode, the result of the read is placed in the lowest available
  * EXT_SENS_DATA register. For further information regarding the allocation of
  * read results, please refer to the EXT_SENS_DATA register description
  * (Registers 73 - 96).
