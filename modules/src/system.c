@@ -90,6 +90,11 @@ static float deltat = 1.0/500.0;
 static const float PI = 3.14159265358979323846f;
 static const float beta = 1.5;
 
+static const float magOffset[] = {-0.330702, -0.160939, -0.024171};
+static const float magMatrix[3][3] = {{0.886713, 0.004624, 0.032183},
+{0.004624, 0.784599, 0.064573},
+{0.032183, 0.064573, 0.970686}};
+
 void MadgwickQuaternionUpdate(float ax, float ay, float az, float gx, float gy, float gz, float mx, float my, float mz)
 {
   float q1 = q[0], q2 = q[1], q3 = q[2], q4 = q[3]; // short name local variable for readability
@@ -186,28 +191,6 @@ void systemTask(void *arg)
   Axis3f mag;  // Magnetometer axis data in tesla
   float yaw, pitch, roll;
   SyslinkPacket packet;
-  float magMaxX = -1e9;
-  float magMaxY = -1e9;
-  float magMaxZ = -1e9;
-  float magMinX = 1e9;
-  float magMinY = 1e9;
-  float magMinZ = 1e9;
-
-  //float magCalib[] = {-429,-237,-251,-63,-102,47}; //WH2
-  float magCalib[] = {-72,118,-36,146,-35,122};//CF4
-
-  float magOffsetX = (magCalib[0] + magCalib[1]) / 2.0f / 1000.0f;
-  float magOffsetY = (magCalib[2] + magCalib[3]) / 2.0f / 1000.0f;
-  float magOffsetZ = (magCalib[4] + magCalib[5]) / 2.0f / 1000.0f;
-  float magDeltaX = (magCalib[1] - magCalib[0]);
-  float magDeltaY = (magCalib[3] - magCalib[2]);
-  float magDeltaZ = (magCalib[5] - magCalib[4]);
-  float magMaxDelta = magDeltaX;
-  if (magDeltaY > magMaxDelta) magMaxDelta = magDeltaY;
-  if (magDeltaZ > magMaxDelta) magMaxDelta = magDeltaZ;
-  float magScaleX = magMaxDelta / magDeltaX;
-  float magScaleY = magMaxDelta / magDeltaY;
-  float magScaleZ = magMaxDelta / magDeltaZ;
 
   ledInit();
   uartInit();
@@ -232,19 +215,13 @@ void systemTask(void *arg)
     imu9Read(&gyro, &acc, &mag);
 
     // correct magnetometer
-    if (! (mag.x == 0 && mag.y == 0 && mag.z == 0))
-    {
-      if (mag.x > magMaxX) magMaxX = mag.x;
-      if (mag.y > magMaxY) magMaxY = mag.y;
-      if (mag.z > magMaxZ) magMaxZ = mag.z;
-      if (mag.x < magMinX) magMinX = mag.x;
-      if (mag.y < magMinY) magMinY = mag.y;
-      if (mag.z < magMinZ) magMinZ = mag.z;
-    }
+    mag.x -= magOffset[0];
+    mag.y -= magOffset[1];
+    mag.z -= magOffset[2];
 
-    mag.x = (mag.x - magOffsetX) * magScaleX;
-    mag.y = (mag.y - magOffsetY) * magScaleY;
-    mag.z = (mag.z - magOffsetZ) * magScaleZ;
+    mag.x = mag.x * magMatrix[0][0] + mag.y * magMatrix[0][1] + mag.z * magMatrix[0][2];
+    mag.y = mag.x * magMatrix[1][0] + mag.y * magMatrix[1][1] + mag.z * magMatrix[1][2];
+    mag.z = mag.x * magMatrix[2][0] + mag.y * magMatrix[2][1] + mag.z * magMatrix[2][2];
 
     MadgwickQuaternionUpdate(acc.x, acc.y, acc.z, gyro.x*PI/180.0f, gyro.y*PI/180.0f, gyro.z*PI/180.0f, mag.y, mag.x, mag.z);
 
@@ -261,10 +238,6 @@ void systemTask(void *arg)
     {
       SEGGER_RTT_printf(0, "A: %d, %d, %d\n", (int)(roll*1.0), (int)(pitch*1.0), (int)(yaw*1.0));
       SEGGER_RTT_printf(0, "V: %d,%d,%d\n", (int)(mag.x*1000.0), (int)(mag.y*1000.0), (int)(mag.z*1000.0));
-      SEGGER_RTT_printf(0, "MM: %d,%d,%d,%d,%d,%d\n",
-        (int)(magMinX*1000.0), (int)(magMaxX*1000.0),
-        (int)(magMinY*1000.0), (int)(magMaxY*1000.0),
-        (int)(magMinZ*1000.0), (int)(magMaxZ*1000.0));
 
       packet.type = SYSLINK_SENSORS_POSE;
       packet.length = 3 * sizeof(float);
