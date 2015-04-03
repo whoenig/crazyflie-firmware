@@ -141,25 +141,25 @@ static void syslinkTask(void *param)
 
 static void syslinkRouteIncommingPacket(SyslinkPacket *slp)
 {
-  uint8_t groupType;
+  // uint8_t groupType;
 
-  groupType = slp->type & SYSLINK_GROUP_MASK;
+  // groupType = slp->type & SYSLINK_GROUP_MASK;
 
-  switch (groupType)
-  {
-    case SYSLINK_RADIO_GROUP:
-      radiolinkSyslinkDispatch(slp);
-      break;
-    case SYSLINK_PM_GROUP:
-      pmSyslinkUpdate(slp);
-      break;
-    case SYSLINK_OW_GROUP:
-      owSyslinkRecieve(slp);
-      break;
-    default:
-      DEBUG_PRINT("Unknown packet:%X.\n", slp->type);
-      break;
-  }
+  // switch (groupType)
+  // {
+  //   case SYSLINK_RADIO_GROUP:
+  //     radiolinkSyslinkDispatch(slp);
+  //     break;
+  //   case SYSLINK_PM_GROUP:
+  //     pmSyslinkUpdate(slp);
+  //     break;
+  //   case SYSLINK_OW_GROUP:
+  //     owSyslinkRecieve(slp);
+  //     break;
+  //   default:
+  //     DEBUG_PRINT("Unknown packet:%X.\n", slp->type);
+  //     break;
+  // }
 }
 
 /*

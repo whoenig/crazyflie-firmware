@@ -187,7 +187,7 @@ void DONT_DISCARD TIM2_IRQHandler(void)
 
 void DONT_DISCARD DMA1_Stream5_IRQHandler(void)
 {
-  ws2812DmaIsr();
+  // ws2812DmaIsr();
 }
 
 void DONT_DISCARD DMA2_Stream7_IRQHandler(void)
@@ -221,11 +221,11 @@ void DONT_DISCARD USART6_IRQHandler(void)
   uartIsr();
 }
 
-extern USB_OTG_CORE_HANDLE           USB_OTG_dev;
-extern uint32_t USBD_OTG_ISR_Handler (USB_OTG_CORE_HANDLE *pdev);
+// extern USB_OTG_CORE_HANDLE           USB_OTG_dev;
+// extern uint32_t USBD_OTG_ISR_Handler (USB_OTG_CORE_HANDLE *pdev);
 
-void OTG_FS_IRQHandler(void)
-{
-  USBD_OTG_ISR_Handler (&USB_OTG_dev);
-}
+// void OTG_FS_IRQHandler(void)
+// {
+//   USBD_OTG_ISR_Handler (&USB_OTG_dev);
+// }
 

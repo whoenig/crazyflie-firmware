@@ -111,6 +111,11 @@ float sinPitch;
 float cosRoll;
 float sinRoll;
 
+// Pre-calculated values for magnetometer adjustment
+float magAdjX;
+float magAdjY;
+float magAdjZ;
+
 LOG_GROUP_START(mag_raw)
 LOG_ADD(LOG_INT16, x, &mag.x)
 LOG_ADD(LOG_INT16, y, &mag.y)
@@ -193,7 +198,13 @@ void imu6Init(void)
   ak8963Init(I2C3_DEV);
   if (ak8963TestConnection() == true)
   {
+    int8_t x, y, z;
     isMagPresent = true;
+    ak8963GetAdjustment(&x, &y, &z);
+    magAdjX = (float)(x - 128)/256.0f + 1.0f;
+    magAdjY = (float)(y - 128)/256.0f + 1.0f;
+    magAdjZ = (float)(z - 128)/256.0f + 1.0f;
+
     ak8963SetMode(AK8963_MODE_16BIT | AK8963_MODE_CONT2); // 16bit 100Hz
     DEBUG_PRINT("AK8963 I2C connection [OK].\n");
   }
@@ -225,10 +236,10 @@ void imu6Init(void)
   varianceSampleTime = -GYRO_MIN_BIAS_TIMEOUT_MS + 1;
   imuAccLpfAttFactor = IMU_ACC_IIR_LPF_ATT_FACTOR;
 
-  cosPitch = cos(configblockGetCalibPitch() * M_PI/180);
-  sinPitch = sin(configblockGetCalibPitch() * M_PI/180);
-  cosRoll = cos(configblockGetCalibRoll() * M_PI/180);
-  sinRoll = sin(configblockGetCalibRoll() * M_PI/180);
+  cosPitch = cos(0); //cos(configblockGetCalibPitch() * M_PI/180);
+  sinPitch = sin(0); //sin(configblockGetCalibPitch() * M_PI/180);
+  cosRoll = cos(0);//cos(configblockGetCalibRoll() * M_PI/180);
+  sinRoll = sin(0);//sin(configblockGetCalibRoll() * M_PI/180);
 
   isInit = true;
 }
@@ -327,10 +338,10 @@ void imu6Read(Axis3f* gyroOut, Axis3f* accOut)
   if (!gyroBias.isBiasValueFound)
   {
     imuFindBiasValue(&gyroBias);
-    if (gyroBias.isBiasValueFound)
-    {
-      ledseqRun(SYS_LED, seq_calibrated);
-    }
+    // if (gyroBias.isBiasValueFound)
+    // {
+    //   ledseqRun(SYS_LED, seq_calibrated);
+    // }
   }
 
 #ifdef IMU_TAKE_ACCEL_BIAS
@@ -389,9 +400,9 @@ void imu9Read(Axis3f* gyroOut, Axis3f* accOut, Axis3f* magOut)
   {
     ak8963GetHeading(&mag.x, &mag.y, &mag.z);
     ak8963GetOverflowStatus();
-    magOut->x = (float)mag.x / MAG_GAUSS_PER_LSB;
-    magOut->y = (float)mag.y / MAG_GAUSS_PER_LSB;
-    magOut->z = (float)mag.z / MAG_GAUSS_PER_LSB;
+    magOut->x = (float)mag.x / MAG_GAUSS_PER_LSB * magAdjX;
+    magOut->y = (float)mag.y / MAG_GAUSS_PER_LSB * magAdjY;
+    magOut->z = (float)mag.z / MAG_GAUSS_PER_LSB * magAdjZ;
   }
   else
   {

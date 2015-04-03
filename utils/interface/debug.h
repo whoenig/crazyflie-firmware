@@ -24,6 +24,7 @@
  * debug.h - Debugging utility functions
  */
 #include "console.h"
+ #include "SEGGER_RTT.h"
 
 #ifdef DEBUG_MODULE
 #define DEBUG_FMT(fmt) DEBUG_MODULE ": " fmt
@@ -43,8 +44,10 @@
   #define DEBUG_PRINT(fmt, ...) eprintf(ITM_SendChar, fmt, ## __VA_ARGS__)
   #define DEBUG_PRINT_OS(fmt, ...) eprintf(ITM_SendChar, fmt, ## __VA_ARGS__)
 #else
-  #define DEBUG_PRINT(fmt, ...) consolePrintf(DEBUG_FMT(fmt), ##__VA_ARGS__)
-#define DEBUG_PRINT_OS(fmt, ...) consolePrintf(DEBUG_FMT(fmt), ##__VA_ARGS__)
+  #define DEBUG_PRINT(fmt, ...) SEGGER_RTT_printf(0, DEBUG_FMT(fmt), ##__VA_ARGS__)
+ #define DEBUG_PRINT_OS(fmt, ...) SEGGER_RTT_printf(0, DEBUG_FMT(fmt), ##__VA_ARGS__)
+  // #define DEBUG_PRINT(fmt, ...) consolePrintf(DEBUG_FMT(fmt), ##__VA_ARGS__)
+  // #define DEBUG_PRINT_OS(fmt, ...) consolePrintf(DEBUG_FMT(fmt), ##__VA_ARGS__)
   //#define DEBUG_PRINT(fmt, ...)
 #endif
 

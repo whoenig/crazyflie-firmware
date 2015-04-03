@@ -8,8 +8,8 @@
 
 ######### JTAG and environment configuration ##########
 OPENOCD           ?= openocd
-OPENOCD_INTERFACE ?= interface/stlink-v2.cfg
-OPENOCD_TARGET    ?= target/stm32f4x_stlink.cfg
+OPENOCD_INTERFACE ?= interface/jlink.cfg
+OPENOCD_TARGET    ?= target/stm32f4x.cfg
 CROSS_COMPILE     ?= arm-none-eabi-
 PYTHON2           ?= python2
 DFU_UTIL          ?= dfu-util
@@ -66,9 +66,9 @@ endif
 ifeq ($(F405), 1)
 	ST_OBJ += cpal_hal.o cpal_i2c.o cpal_usercallback_template.o cpal_i2c_hal_stm32f4xx.o
 	# USB obj
-	ST_OBJ += usb_core.o usb_dcd_int.o usb_dcd.o
+	# ST_OBJ += usb_core.o usb_dcd_int.o usb_dcd.o
 	# USB Device obj
-	ST_OBJ += usbd_ioreq.o usbd_req.o usbd_core.o
+	# ST_OBJ += usbd_ioreq.o usbd_req.o usbd_core.o
 endif
 
 
@@ -99,37 +99,41 @@ else
 endif
 
 # Drivers
-PROJ_OBJ += led.o exti.o nvic.o  
+PROJ_OBJ += led.o exti.o nvic.o
 
 ifeq ($(F405), 1)
-  PROJ_OBJ += mpu6500.o motors_f405.o i2cdev_f405.o ws2812.o lps25h.o ak8963.o eeprom.o
-  PROJ_OBJ += uart_syslink.o swd.o
+  # PROJ_OBJ += mpu6500.o motors_f405.o i2cdev_f405.o ws2812.o lps25h.o ak8963.o eeprom.o
+  PROJ_OBJ += mpu6500.o i2cdev_f405.o ak8963.o lps25h.o
+  PROJ_OBJ += uart_syslink.o #swd.o
   # USB Files
-  PROJ_OBJ += usbd_usr.o usb_bsp.o usblink.o usbd_desc.o usb.o
+  # PROJ_OBJ += usbd_usr.o usb_bsp.o usblink.o usbd_desc.o usb.o
 else
   PROJ_OBJ += mpu6050.o motors.o hmc5883l.o ms5611.o
 endif
 
 # Hal
-PROJ_OBJ += crtp.o ledseq.o freeRTOSdebug.o syslink.o
+PROJ_OBJ += crtp.o freeRTOSdebug.o syslink.o #ledseq.o freeRTOSdebug.o syslink.o
 ifeq ($(F405), 1)
-PROJ_OBJ += imu_cf2.o pm_f405.o radiolink.o ow.o
+PROJ_OBJ += imu_cf2.o #pm_f405.o radiolink.o ow.o
 else
 PROJ_OBJ += imu.o pm.o
 endif
 
 # Modules
-PROJ_OBJ += system.o comm.o console.o pid.o crtpservice.o param.o mem.o platformservice.o
-PROJ_OBJ += commander.o controller.o sensfusion6.o stabilizer.o
-PROJ_OBJ += log.o worker.o neopixelring.o expbrd.o
+# PROJ_OBJ += system.o comm.o console.o pid.o crtpservice.o param.o mem.o platformservice.o
+PROJ_OBJ += system.o console.o
+# PROJ_OBJ += commander.o controller.o sensfusion6.o stabilizer.o
+# PROJ_OBJ += log.o worker.o neopixelring.o expbrd.o
 
 
 # Expansion boards
-PROJ_OBJ += exptest.o
+# PROJ_OBJ += exptest.o
 
 # Utilities
-PROJ_OBJ += filter.o cpuid.o cfassert.o configblockeeprom.o eprintf.o crc.o fp16.o debug.o
-PROJ_OBJ += version.o
+# PROJ_OBJ += filter.o cpuid.o cfassert.o configblockeeprom.o eprintf.o crc.o fp16.o debug.o
+PROJ_OBJ += filter.o cfassert.o eprintf.o
+# PROJ_OBJ += version.o
+PROJ_OBJ += SEGGER_RTT.o SEGGER_RTT_printf.o
 
 
 OBJ = $(CRT0) $(FREERTOS_OBJ) $(PORT_OBJ) $(ST_OBJ) $(PROJ_OBJ)
@@ -157,7 +161,7 @@ INCLUDES+= -I$(STLIB)/STM32_CPAL_Driver/inc
 INCLUDES+= -I$(STLIB)/STM32_USB_Device_Library/Core/inc
 INCLUDES+= -I$(STLIB)/STM32_USB_OTG_Driver/inc
 INCLUDES+= -I$(STLIB)/STM32_CPAL_Driver/devices/stm32f4xx
-INCLUDES+= -I$(STLIB)/CMSIS/STM32F4xx/Include 
+INCLUDES+= -I$(STLIB)/CMSIS/STM32F4xx/Include
 endif
 
 
