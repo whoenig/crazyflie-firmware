@@ -90,10 +90,10 @@ static float deltat = 1.0/500.0;
 static const float PI = 3.14159265358979323846f;
 static const float beta = 1.5;
 
-static const float magOffset[] = {-0.330702, -0.160939, -0.024171};
-static const float magMatrix[3][3] = {{0.886713, 0.004624, 0.032183},
-{0.004624, 0.784599, 0.064573},
-{0.032183, 0.064573, 0.970686}};
+static const float magOffset[] = {0.010706, -0.056488, -0.052746};
+static const float magMatrix[3][3] = {{1.001645, -0.047946, -0.009171},
+{0.035689, -1.008442, -0.016566},
+{-0.008095, 0.017107, -1.218871}};
 
 void MadgwickQuaternionUpdate(float ax, float ay, float az, float gx, float gy, float gz, float mx, float my, float mz)
 {
@@ -209,29 +209,32 @@ void systemTask(void *arg)
 
   while(1)
   {
+    float magCalibX, magCalibY, magCalibZ;
+
     vTaskDelayUntil(&lastWakeTime, F2T(500)); // 500Hz
 
     // Magnetometer not yet used more then for logging.
     imu9Read(&gyro, &acc, &mag);
 
     // correct magnetometer
-    mag.x -= magOffset[0];
-    mag.y -= magOffset[1];
-    mag.z -= magOffset[2];
+    magCalibX = mag.x * magMatrix[0][0] + mag.y * magMatrix[0][1] + mag.z * magMatrix[0][2];
+    magCalibY = mag.x * magMatrix[1][0] + mag.y * magMatrix[1][1] + mag.z * magMatrix[1][2];
+    magCalibZ = mag.x * magMatrix[2][0] + mag.y * magMatrix[2][1] + mag.z * magMatrix[2][2];
 
-    mag.x = mag.x * magMatrix[0][0] + mag.y * magMatrix[0][1] + mag.z * magMatrix[0][2];
-    mag.y = mag.x * magMatrix[1][0] + mag.y * magMatrix[1][1] + mag.z * magMatrix[1][2];
-    mag.z = mag.x * magMatrix[2][0] + mag.y * magMatrix[2][1] + mag.z * magMatrix[2][2];
+    magCalibX -= magOffset[0];
+    magCalibY -= magOffset[1];
+    magCalibZ -= magOffset[2];
 
-    MadgwickQuaternionUpdate(acc.x, acc.y, acc.z, gyro.x*PI/180.0f, gyro.y*PI/180.0f, gyro.z*PI/180.0f, mag.y, mag.x, mag.z);
-
+    MadgwickQuaternionUpdate(
+      acc.x, acc.y, acc.z,
+      gyro.x*PI/180.0f, gyro.y*PI/180.0f, gyro.z*PI/180.0f,
+      magCalibX, magCalibY, magCalibZ);
 
     yaw = atan2(2.0f * (q[1] * q[2] + q[0] * q[3]), q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3]);
     pitch = -asin(2.0f * (q[1] * q[3] - q[0] * q[2]));
     roll = atan2(2.0f * (q[0] * q[1] + q[2] * q[3]), q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3]);
     pitch *= 180.0f / PI;
     yaw *= 180.0f / PI;
-    //yaw -= 13.8f; // Declination at Danville, California is 13 degrees 48 minutes and 47 seconds on 2014-04-04
     roll *= 180.0f / PI;
 
     if (xTaskGetTickCount() > lastOutputTime + M2T(100))
