@@ -117,6 +117,22 @@ static uint16_t altHoldMinThrust    = 00000; // minimum hover thrust - not used 
 static uint16_t altHoldBaseThrust   = 43000; // approximate throttle needed when in perfect hover. More weight/older battery can use a higher value
 static uint16_t altHoldMaxThrust    = 60000; // max altitude hold thrust
 
+// Params for magnetometer calibration
+static float magCalibM11    =  1.0f;
+static float magCalibM12    =  0.0f;
+static float magCalibM13    =  0.0f;
+static float magCalibM21    =  0.0f;
+static float magCalibM22    = -1.0f;
+static float magCalibM23    =  0.0f;
+static float magCalibM31    =  0.0f;
+static float magCalibM32    =  0.0f;
+static float magCalibM33    = -1.0f;
+static float magCalibB1     =  0.0f;
+static float magCalibB2     =  0.0f;
+static float magCalibB3     =  0.0f;
+
+// sensor fusion params
+static uint8_t sensfusionUseMag = 0;
 
 RPYType rollType;
 RPYType pitchType;
@@ -202,7 +218,18 @@ static void stabilizerTask(void* param)
       // 250HZ
       if (++attitudeCounter >= ATTITUDE_UPDATE_RATE_DIVIDER)
       {
-        sensfusion6UpdateQ(gyro.x, gyro.y, gyro.z, acc.x, acc.y, acc.z, FUSION_UPDATE_DT);
+        if (sensfusionUseMag)
+        {
+          float magCalibx, magCaliby, magCalibz;
+          magCalibx = magCalibM11 * (mag.x - magCalibB1) + magCalibM12 * (mag.y - magCalibB2) + magCalibM13 * (mag.z - magCalibB3);
+          magCaliby = magCalibM21 * (mag.x - magCalibB1) + magCalibM22 * (mag.y - magCalibB2) + magCalibM23 * (mag.z - magCalibB3);
+          magCalibz = magCalibM31 * (mag.x - magCalibB1) + magCalibM32 * (mag.y - magCalibB2) + magCalibM33 * (mag.z - magCalibB3);
+          sensfusion9UpdateQ(gyro.x*(M_PI/180.0f), gyro.y*(M_PI/180.0f), gyro.z*(M_PI/180.0f), acc.x, acc.y, acc.z, magCalibx, magCaliby, magCalibz, FUSION_UPDATE_DT);
+        }
+        else
+        {
+          sensfusion6UpdateQ(gyro.x*(M_PI/180.0f), gyro.y*(M_PI/180.0f), gyro.z*(M_PI/180.0f), acc.x, acc.y, acc.z, FUSION_UPDATE_DT);
+        }
         sensfusion6GetEulerRPY(&eulerRollActual, &eulerPitchActual, &eulerYawActual);
 
         accWZ = sensfusion6GetAccZWithoutGravity(acc.x, acc.y, acc.z);
@@ -499,3 +526,23 @@ PARAM_ADD(PARAM_UINT16, maxThrust, &altHoldMaxThrust)
 PARAM_ADD(PARAM_UINT16, minThrust, &altHoldMinThrust)
 PARAM_GROUP_STOP(altHold)
 
+// Params for magnetometer calibration
+PARAM_GROUP_START(magCalib)
+PARAM_ADD(PARAM_FLOAT, M11, &magCalibM11)
+PARAM_ADD(PARAM_FLOAT, M12, &magCalibM12)
+PARAM_ADD(PARAM_FLOAT, M13, &magCalibM13)
+PARAM_ADD(PARAM_FLOAT, M21, &magCalibM21)
+PARAM_ADD(PARAM_FLOAT, M22, &magCalibM22)
+PARAM_ADD(PARAM_FLOAT, M23, &magCalibM23)
+PARAM_ADD(PARAM_FLOAT, M31, &magCalibM31)
+PARAM_ADD(PARAM_FLOAT, M32, &magCalibM32)
+PARAM_ADD(PARAM_FLOAT, M33, &magCalibM33)
+PARAM_ADD(PARAM_FLOAT, B1, &magCalibB1)
+PARAM_ADD(PARAM_FLOAT, B2, &magCalibB2)
+PARAM_ADD(PARAM_FLOAT, B3, &magCalibB3)
+PARAM_GROUP_STOP(magCalib)
+
+// Params for sensor fusion
+PARAM_GROUP_START(sensfusion)
+PARAM_ADD(PARAM_UINT8, useMag, &sensfusionUseMag)
+PARAM_GROUP_STOP(sensfusion)
