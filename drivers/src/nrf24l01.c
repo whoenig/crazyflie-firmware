@@ -28,6 +28,7 @@
  *  - Separate the SPI and GPIO driver from here.
  *  - Handle PTX mode
  */
+#define DEBUG_MODULE "NRF"
 
 #include "nrf24l01.h"
 
@@ -36,11 +37,10 @@
 
 #include "cfassert.h"
 
-#include "stm32f10x_conf.h"
-#include "stm32f10x_rcc.h"
-#include "stm32f10x_spi.h"
-#include "stm32f10x_exti.h"
+/* ST includes */
+#include "stm32fxxx.h"
 
+#include "debug.h"
 #include "exti.h"
 
 #include "nRF24L01reg.h"

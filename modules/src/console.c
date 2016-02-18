@@ -1,6 +1,6 @@
 /**
- *    ||          ____  _ __                           
- * +------+      / __ )(_) /_______________ _____  ___ 
+ *    ||          ____  _ __
+ * +------+      / __ )(_) /_______________ _____  ___
  * | 0xBC |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
  * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
  *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
@@ -28,23 +28,42 @@
 
 /*FreeRtos includes*/
 #include "FreeRTOS.h"
-#include "task.h"
 #include "semphr.h"
 
 #include "crtp.h"
 
+#ifdef STM32F40_41xxx
+#include "stm32f4xx.h"
+#else
+#include "stm32f10x.h"
+#ifndef SCB_ICSR_VECTACTIVE_Msk
+#define SCB_ICSR_VECTACTIVE_Msk 0x1FFUL
+#endif
+#endif
+
 CRTPPacket messageToPrint;
 xSemaphoreHandle synch = NULL;
 
+static const char fullMsg[] = "<F>\n";
 static bool isInit;
 
 /**
  * Send the data to the client
+ * returns TRUE if successful otherwise FALSE
  */
-static void consoleSendMessage(void)
+static bool consoleSendMessage(void)
 {
-  crtpSendPacketBlock(&messageToPrint);
-  messageToPrint.size = 0;
+
+  if (crtpSendPacket(&messageToPrint) == pdTRUE)
+  {
+    messageToPrint.size = 0;
+  }
+  else
+  {
+    return false;
+  }
+
+  return true;
 }
 
 void consoleInit()
@@ -55,7 +74,7 @@ void consoleInit()
   messageToPrint.size = 0;
   messageToPrint.header = CRTP_HEADER(CRTP_PORT_CONSOLE, 0);
   vSemaphoreCreateBinary(synch);
-  
+
   isInit = true;
 }
 
@@ -66,27 +85,64 @@ bool consoleTest(void)
 
 int consolePutchar(int ch)
 {
+  int i;
+  bool isInInterrupt = (SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) != 0;
+
+  if (!isInit) {
+    return 0;
+  }
+
+  if (isInInterrupt) {
+    return consolePutcharFromISR(ch);
+  }
+
   if (xSemaphoreTake(synch, portMAX_DELAY) == pdTRUE)
   {
-    messageToPrint.data[messageToPrint.size] = (unsigned char)ch;
-    messageToPrint.size++;
-    if (ch == '\n' || messageToPrint.size == CRTP_MAX_DATA_SIZE)
+    if (messageToPrint.size < CRTP_MAX_DATA_SIZE)
     {
+      messageToPrint.data[messageToPrint.size] = (unsigned char)ch;
+      messageToPrint.size++;
+    }
+    if (ch == '\n' || messageToPrint.size >= CRTP_MAX_DATA_SIZE)
+    {
+      if (crtpGetFreeTxQueuePackets() == 1)
+      {
+        for (i = 0; i < sizeof(fullMsg) && (messageToPrint.size - i) > 0; i++)
+        {
+          messageToPrint.data[messageToPrint.size - i] =
+              (uint8_t)fullMsg[sizeof(fullMsg) - i - 1];
+        }
+      }
       consoleSendMessage();
     }
     xSemaphoreGive(synch);
   }
-  
+
   return (unsigned char)ch;
+}
+
+int consolePutcharFromISR(int ch) {
+  BaseType_t higherPriorityTaskWoken;
+
+  if (xSemaphoreTakeFromISR(synch, &higherPriorityTaskWoken) == pdTRUE) {
+    if (messageToPrint.size < CRTP_MAX_DATA_SIZE)
+    {
+      messageToPrint.data[messageToPrint.size] = (unsigned char)ch;
+      messageToPrint.size++;
+    }
+    xSemaphoreGiveFromISR(synch, &higherPriorityTaskWoken);
+  }
+
+  return ch;
 }
 
 int consolePuts(char *str)
 {
   int ret = 0;
-  
+
   while(*str)
     ret |= consolePutchar(*str++);
-  
+
   return ret;
 }
 

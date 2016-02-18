@@ -7,7 +7,7 @@
  *
  * Crazyflie control firmware
  *
- * Copyright (C) 2012 BitCraze AB
+ * Copyright (C) 2011-2012 Bitcraze AB
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,17 +21,23 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
- * radiolink.c: nRF24L01 implementation of the CRTP link
+ * radiolink.c - Radio link layer
  */
 
-#ifndef __RADIOLINK_H__
-#define __RADIOLINK_H__
+#ifndef __RADIO_H__
+#define __RADIO_H__
 
-#include "crtp.h"
+#include <stdint.h>
+#include <stdbool.h>
+#include "syslink.h"
 
-void radiolinkInit();
-bool radiolinkTest();
+void radiolinkInit(void);
+bool radiolinkTest(void);
+void radiolinkSetChannel(uint8_t channel);
+void radiolinkSetDatarate(uint8_t datarate);
+void radiolinkSetAddress(uint64_t address);
+void radiolinkSyslinkDispatch(SyslinkPacket *slp);
 struct crtpLinkOperations * radiolinkGetLink();
-void radiolinkReInit(void);
 
-#endif
+
+#endif //__RADIO_H__

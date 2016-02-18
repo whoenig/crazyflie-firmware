@@ -1,6 +1,6 @@
 /**
- *    ||          ____  _ __                           
- * +------+      / __ )(_) /_______________ _____  ___ 
+ *    ||          ____  _ __
+ * +------+      / __ )(_) /_______________ _____  ___
  * | 0xBC |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
  * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
  *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
@@ -86,7 +86,7 @@ void uartDmaInit(void)
   DMA_InitStructureShare.DMA_M2M = DMA_M2M_Disable;
 
   NVIC_InitStructure.NVIC_IRQChannel = UART_DMA_IRQ;
-  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = NVIC_UART_PRI;
+  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = NVIC_LOW_PRI;
   NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
   NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
   NVIC_Init(&NVIC_InitStructure);
@@ -133,7 +133,7 @@ void uartInit(void)
 #else
   // Configure Tx buffer empty interrupt
   NVIC_InitStructure.NVIC_IRQChannel = USART3_IRQn;
-  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = NVIC_HIGH_PRI;
   NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
   NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
   NVIC_Init(&NVIC_InitStructure);
@@ -142,15 +142,15 @@ void uartInit(void)
 
   vSemaphoreCreateBinary(waitUntilSendDone);
 
-  xTaskCreate(uartRxTask, (const signed char * const)"UART-Rx",
-              configMINIMAL_STACK_SIZE, NULL, /*priority*/2, NULL);
+  xTaskCreate(uartRxTask, UART_RX_TASK_NAME,
+              UART_RX_TASK_STACKSIZE, NULL, UART_RX_TASK_PRI, NULL);
 
   packetDelivery = xQueueCreate(2, sizeof(CRTPPacket));
-  uartDataDelivery = xQueueCreate(40, sizeof(uint8_t));
+  uartDataDelivery = xQueueCreate(1024, sizeof(uint8_t));
 #endif
   //Enable it
   USART_Cmd(UART_TYPE, ENABLE);
-  
+
   isInit = true;
 }
 
@@ -264,12 +264,18 @@ void uartIsr(void)
       xHigherPriorityTaskWoken = pdFALSE;
       xSemaphoreGiveFromISR(waitUntilSendDone, &xHigherPriorityTaskWoken);
     }
+    USART_ClearITPendingBit(UART_TYPE, USART_IT_TXE);
   }
-  USART_ClearITPendingBit(UART_TYPE, USART_IT_TXE);
+
   if (USART_GetITStatus(UART_TYPE, USART_IT_RXNE))
   {
     rxDataInterrupt = USART_ReceiveData(UART_TYPE) & 0xFF;
     xQueueSendFromISR(uartDataDelivery, &rxDataInterrupt, &xHigherPriorityTaskWoken);
+
+    if (xHigherPriorityTaskWoken)
+    {
+      portYIELD();
+    }
   }
 }
 
@@ -289,7 +295,7 @@ static int uartSendCRTPPacket(CRTPPacket *p)
   USART_SendData(UART_TYPE, outBuffer[0] & 0xFF);
   USART_ITConfig(UART_TYPE, USART_IT_TXE, ENABLE);
   xSemaphoreTake(waitUntilSendDone, portMAX_DELAY);
-  
+
   return 0;
 }
 
@@ -333,7 +339,7 @@ void uartSendData(uint32_t size, uint8_t* data)
 int uartPutchar(int ch)
 {
     uartSendData(1, (uint8_t *)&ch);
-    
+
     return (unsigned char)ch;
 }
 
@@ -351,4 +357,16 @@ void uartSendDataDma(uint32_t size, uint8_t* data)
     USART_DMACmd(UART_TYPE, USART_DMAReq_Tx, ENABLE);
     DMA_Cmd(UART_DMA_CH, ENABLE);
   }
+}
+
+void __attribute__((used)) USART3_IRQHandler(void)
+{
+  uartIsr();
+}
+
+void __attribute__((used)) DMA1_Channel2_IRQHandler(void)
+{
+#if defined(UART_OUTPUT_TRACE_DATA) || defined(ADC_OUTPUT_RAW_DATA)
+  uartDmaIsr();
+#endif
 }

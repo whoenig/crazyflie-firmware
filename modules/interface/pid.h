@@ -1,6 +1,6 @@
 /**
- *    ||          ____  _ __                           
- * +------+      / __ )(_) /_______________ _____  ___ 
+ *    ||          ____  _ __
+ * +------+      / __ )(_) /_______________ _____  ___
  * | 0xBC |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
  * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
  *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
@@ -32,17 +32,17 @@
 #define PID_ROLL_RATE_KP  70.0
 #define PID_ROLL_RATE_KI  0.0
 #define PID_ROLL_RATE_KD  0.0
-#define PID_ROLL_RATE_INTEGRATION_LIMIT    100.0
+#define PID_ROLL_RATE_INTEGRATION_LIMIT    33.3
 
 #define PID_PITCH_RATE_KP  70.0
 #define PID_PITCH_RATE_KI  0.0
 #define PID_PITCH_RATE_KD  0.0
-#define PID_PITCH_RATE_INTEGRATION_LIMIT   100.0
+#define PID_PITCH_RATE_INTEGRATION_LIMIT   33.3
 
-#define PID_YAW_RATE_KP  50.0
-#define PID_YAW_RATE_KI  25.0
+#define PID_YAW_RATE_KP  70.0
+#define PID_YAW_RATE_KI  16.7
 #define PID_YAW_RATE_KD  0.0
-#define PID_YAW_RATE_INTEGRATION_LIMIT     500.0
+#define PID_YAW_RATE_INTEGRATION_LIMIT     166.7
 
 #define PID_ROLL_KP  3.5
 #define PID_ROLL_KI  2.0
@@ -54,9 +54,9 @@
 #define PID_PITCH_KD  0.0
 #define PID_PITCH_INTEGRATION_LIMIT   20.0
 
-#define PID_YAW_KP  0.0
-#define PID_YAW_KI  0.0
-#define PID_YAW_KD  0.0
+#define PID_YAW_KP  10.0
+#define PID_YAW_KI  1.0
+#define PID_YAW_KD  0.35
 #define PID_YAW_INTEGRATION_LIMIT     360.0
 
 

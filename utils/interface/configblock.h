@@ -30,10 +30,12 @@
 #define __CONFIGBLOCK_H__
 
 int configblockInit(void);
+bool configblockTest(void);
 
 /* Static accessors */
 int configblockGetRadioChannel(void);
 int configblockGetRadioSpeed(void);
+uint64_t configblockGetRadioAddress(void);
 
 float configblockGetCalibPitch(void);
 float configblockGetCalibRoll(void);

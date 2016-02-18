@@ -24,14 +24,8 @@
  *
  * pid.c - implementation of the PID regulator
  */
-#include "stm32f10x_conf.h"
-#include <math.h>
 
-#include "FreeRTOS.h"
-#include "task.h"
 #include "pid.h"
-#include "led.h"
-#include "motors.h"
 
 void pidInit(PidObject* pid, const float desired, const float kp,
              const float ki, const float kd, const float dt)
@@ -115,11 +109,11 @@ float pidGetDesired(PidObject* pid)
 
 bool pidIsActive(PidObject* pid)
 {
-  bool isActive = TRUE;
+  bool isActive = true;
 
   if (pid->kp < 0.0001 && pid->ki < 0.0001 && pid->kd < 0.0001)
   {
-    isActive = FALSE;
+    isActive = false;
   }
 
   return isActive;

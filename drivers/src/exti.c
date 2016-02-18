@@ -1,6 +1,6 @@
 /**
- *    ||          ____  _ __                           
- * +------+      / __ )(_) /_______________ _____  ___ 
+ *    ||          ____  _ __
+ * +------+      / __ )(_) /_______________ _____  ___
  * | 0xBC |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
  * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
  *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
@@ -25,13 +25,18 @@
  */
 #include <stdbool.h>
 
-#include "stm32f10x_conf.h"
-#include "stm32f10x_exti.h"
+#include "stm32fxxx.h"
 
 #include "nvicconf.h"
 #include "nrf24l01.h"
 
-#define RADIO_GPIO_IRQ_LINE EXTI_Line9
+#ifdef PLATFORM_CF1
+  #define RADIO_GPIO_IRQ_LINE   EXTI_Line9
+  #define RADIO_IRQ_CHANNEL     EXTI9_5_IRQn
+#else
+  #define RADIO_GPIO_IRQ_LINE   EXTI_Line10
+  #define RADIO_IRQ_CHANNEL     EXTI15_10_IRQn
+#endif
 
 static bool isInit;
 
@@ -43,12 +48,12 @@ void extiInit()
 
   NVIC_InitTypeDef NVIC_InitStructure;
 
-  NVIC_InitStructure.NVIC_IRQChannel = EXTI9_5_IRQn;
+  NVIC_InitStructure.NVIC_IRQChannel = RADIO_IRQ_CHANNEL;
   NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = NVIC_RADIO_PRI;
   NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
   NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
   NVIC_Init(&NVIC_InitStructure);
-  
+
   isInit = true;
 }
 
@@ -57,11 +62,13 @@ bool extiTest(void)
   return isInit;
 }
 
-void extiInterruptHandler(void)
+#ifdef PLATFORM_CF1
+void __attribute__((used)) EXTI9_5_IRQHandler(void)
 {
-  if (EXTI_GetITStatus(RADIO_GPIO_IRQ_LINE)==SET)
+  if (EXTI_GetITStatus(RADIO_GPIO_IRQ_LINE) == SET)
   {
-    nrfIsr();
     EXTI_ClearITPendingBit(RADIO_GPIO_IRQ_LINE);
+    nrfIsr();
   }
 }
+#endif

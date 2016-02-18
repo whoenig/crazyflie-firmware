@@ -25,28 +25,23 @@
  */
 #include <stdbool.h>
  
-#include "stm32f10x_conf.h"
 #include "FreeRTOS.h"
-#include "task.h"
 
 #include "controller.h"
 #include "pid.h"
 #include "param.h"
 #include "imu.h"
-/*
-#define TRUNCATE_SINT16(out, in) \
-  {\
-    if (in > INT16_MAX) out = (int16_t)INT16_MAX;\
-    else if (in < INT16_MIN) out = (int16_t)INT16_MIN;\
-    else out = (int16_t)in;\
-  }
-*/
 
-//Fancier version
-#define TRUNCATE_SINT16(out, in) (out = (in<INT16_MIN)?INT16_MIN:((in>INT16_MAX)?INT16_MAX:in) )
-
-//Better semantic
-#define SATURATE_SINT16(in) ( (in<INT16_MIN)?INT16_MIN:((in>INT16_MAX)?INT16_MAX:in) )
+static inline int16_t saturateSignedInt16(float in)
+{
+  // don't use INT16_MIN, because later we may negate it, which won't work for that value.
+  if (in > INT16_MAX)
+    return INT16_MAX;
+  else if (in < -INT16_MAX)
+    return -INT16_MAX;
+  else
+    return (int16_t)in;
+}
 
 PidObject pidRollRate;
 PidObject pidPitchRate;
@@ -94,13 +89,13 @@ void controllerCorrectRatePID(
        float rollRateDesired, float pitchRateDesired, float yawRateDesired)
 {
   pidSetDesired(&pidRollRate, rollRateDesired);
-  TRUNCATE_SINT16(rollOutput, pidUpdate(&pidRollRate, rollRateActual, TRUE));
+  rollOutput = saturateSignedInt16(pidUpdate(&pidRollRate, rollRateActual, true));
 
   pidSetDesired(&pidPitchRate, pitchRateDesired);
-  TRUNCATE_SINT16(pitchOutput, pidUpdate(&pidPitchRate, pitchRateActual, TRUE));
+  pitchOutput = saturateSignedInt16(pidUpdate(&pidPitchRate, pitchRateActual, true));
 
   pidSetDesired(&pidYawRate, yawRateDesired);
-  TRUNCATE_SINT16(yawOutput, pidUpdate(&pidYawRate, yawRateActual, TRUE));
+  yawOutput = saturateSignedInt16(pidUpdate(&pidYawRate, yawRateActual, true));
 }
 
 void controllerCorrectAttitudePID(
@@ -109,11 +104,11 @@ void controllerCorrectAttitudePID(
        float* rollRateDesired, float* pitchRateDesired, float* yawRateDesired)
 {
   pidSetDesired(&pidRoll, eulerRollDesired);
-  *rollRateDesired = pidUpdate(&pidRoll, eulerRollActual, TRUE);
+  *rollRateDesired = pidUpdate(&pidRoll, eulerRollActual, true);
 
   // Update PID for pitch axis
   pidSetDesired(&pidPitch, eulerPitchDesired);
-  *pitchRateDesired = pidUpdate(&pidPitch, eulerPitchActual, TRUE);
+  *pitchRateDesired = pidUpdate(&pidPitch, eulerPitchActual, true);
 
   // Update PID for yaw axis
   float yawError;
@@ -123,7 +118,7 @@ void controllerCorrectAttitudePID(
   else if (yawError < -180.0)
     yawError += 360.0;
   pidSetError(&pidYaw, yawError);
-  *yawRateDesired = pidUpdate(&pidYaw, eulerYawActual, FALSE);
+  *yawRateDesired = pidUpdate(&pidYaw, eulerYawActual, false);
 }
 
 void controllerResetAllPID(void)

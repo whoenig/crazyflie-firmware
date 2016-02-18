@@ -7,7 +7,7 @@
  *
  * Crazyflie control firmware
  *
- * Copyright (C) 2015 Bitcraze AB
+ * Copyright (C) 2012 BitCraze AB
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,18 +21,17 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
- * link.h - Used to send/receive link packats
+ * log.h - Dynamic log system
  */
 
 #ifndef __MEM_H__
 #define __MEM_H__
 
-/**
- * Initialize the link task
- */
-void memInit(void);
+#include <stdbool.h>
+#include <stdint.h>
 
+/* Public functions */
+void memInit(void);
 bool memTest(void);
 
 #endif /* __MEM_H__ */
-

@@ -31,6 +31,7 @@ THE SOFTWARE.
 #ifndef HMC5883L_H_
 #define HMC5883L_H_
 #include <stdbool.h>
+#include "i2cdev.h"
 
 #define HMC5883L_ADDRESS            0x1E // this device only has one address
 #define HMC5883L_DEFAULT_ADDRESS    0x1E
