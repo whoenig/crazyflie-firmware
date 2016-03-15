@@ -49,6 +49,7 @@
 #include "num.h"
 #include "altitudehold.h"
 
+#include "SEGGER_RTT.h"
 
 /**
  * Defines in what divided update rate should the attitude
@@ -205,12 +206,29 @@ static void stabilizerTask(void* param)
 
   lastWakeTime = xTaskGetTickCount ();
 
+  SEGGER_RTT_Init();
+  SEGGER_RTT_ConfigUpBuffer(0, NULL, NULL, 0, SEGGER_RTT_MODE_NO_BLOCK_TRIM);
+
   while(1)
   {
     vTaskDelayUntil(&lastWakeTime, F2T(IMU_UPDATE_FREQ)); // 500Hz
 
     // Magnetometer not yet used more then for logging.
+
+    // 1 tick = 1ms
+    TickType_t ticks = xTaskGetTickCount();
+    uint64_t time = ticks;
+
     imu9Read(&gyro, &acc, &mag);
+
+    uint16_t magic = 0xFBCF;
+
+    SEGGER_RTT_Write(0, (const char*)&magic, sizeof(magic));
+    SEGGER_RTT_Write(0, (const char*)&time, sizeof(time));
+    SEGGER_RTT_Write(0, (const char*)&gyro, sizeof(gyro));
+    SEGGER_RTT_Write(0, (const char*)&acc, sizeof(acc));
+    SEGGER_RTT_Write(0, (const char*)&mag, sizeof(mag));
+    SEGGER_RTT_Write(0, (const char*)&pressure, sizeof(pressure));
 
     if (imu6IsCalibrated())
     {
