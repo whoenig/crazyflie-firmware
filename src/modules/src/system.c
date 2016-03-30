@@ -91,6 +91,8 @@ void systemLaunch(void)
 
 }
 
+extern float testCpp(void);
+
 // This must be the first module to be initialized!
 void systemInit(void)
 {
@@ -115,6 +117,9 @@ void systemInit(void)
   DEBUG_PRINT("I am 0x%X%X%X and I have %dKB of flash!\n",
               *((int*)(MCU_ID_ADDRESS+8)), *((int*)(MCU_ID_ADDRESS+4)),
               *((int*)(MCU_ID_ADDRESS+0)), *((short*)(MCU_FLASH_SIZE_ADDRESS)));
+
+  float r = testCpp();
+  DEBUG_PRINT("Cpp test: %f\n", r);
 
   configblockInit();
   workerInit();

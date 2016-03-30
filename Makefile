@@ -148,6 +148,7 @@ PROJ_OBJ += commander.o attitude_pid_controller.o sensfusion6.o stabilizer.o pos
 PROJ_OBJ += log.o worker.o trigger.o sitaw.o queuemonitor.o
 PROJ_OBJ_CF1 += sound_cf1.o
 PROJ_OBJ_CF2 += platformservice.o sound_cf2.o extrx.o
+PROJ_OBJ_CF2 += test_cpp.cpp.o
 
 # Deck Core
 PROJ_OBJ_CF2 += deck.o deck_info.o deck_drivers.o deck_test.o
@@ -191,7 +192,8 @@ endif
 ############### Compilation configuration ################
 AS = $(CROSS_COMPILE)as
 CC = $(CROSS_COMPILE)gcc
-LD = $(CROSS_COMPILE)gcc
+CPLUS = $(CROSS_COMPILE)g++
+LD = $(CROSS_COMPILE)g++
 SIZE = $(CROSS_COMPILE)size
 OBJCOPY = $(CROSS_COMPILE)objcopy
 
@@ -261,7 +263,8 @@ CFLAGS += -MD -MP -MF $(BIN)/dep/$(@).d -MQ $(@)
 CFLAGS += -ffunction-sections -fdata-sections
 
 ASFLAGS = $(PROCESSOR) $(INCLUDES)
-LDFLAGS = --specs=nano.specs $(PROCESSOR) -Wl,-Map=$(PROG).map,--cref,--gc-sections,--undefined=uxTopUsedPriority
+# nosys.specs only needed for "advanced" C++ features
+LDFLAGS = --specs nosys.specs --specs=nano.specs $(PROCESSOR) -Wl,-Map=$(PROG).map,--cref,--gc-sections,--undefined=uxTopUsedPriority
 
 #Flags required by the ST library
 ifeq ($(CLOAD), 1)
@@ -360,6 +363,11 @@ prep:
 
 check_submodules:
 	@$(PYTHON2) tools/make/check-for-submodules.py
+
+# You can add -fno-exceptions and similar flags to reduce overhead
+# This enables C++11 as well
+%.cpp.o: %.cpp
+	$(CPLUS) $(CFLAGS) -O3 -std=c++11 -c $< -o $(BIN)/$@
 
 include tools/make/targets.mk
 
