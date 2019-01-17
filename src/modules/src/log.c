@@ -120,6 +120,7 @@ struct ops_setting_v2 {
 #define CONTROL_RESET           5
 #define CONTROL_CREATE_BLOCK_V2 6
 #define CONTROL_APPEND_BLOCK_V2 7
+#define CONTROL_START_BLOCK_V2  8
 
 #define BLOCK_ID_FREE -1
 
@@ -381,6 +382,9 @@ void logControlProcess()
       break;
     case CONTROL_START_BLOCK:
       ret = logStartBlock( p.data[1], p.data[2]*10);
+      break;
+    case CONTROL_START_BLOCK_V2:
+      ret = logStartBlock( p.data[1], *((uint16_t*)&p.data[2]));
       break;
     case CONTROL_STOP_BLOCK:
       ret = logStopBlock( p.data[1] );
