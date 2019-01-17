@@ -71,6 +71,7 @@ enum packet_type {
   hoverType         = 5,
   fullStateType     = 6,
   positionType      = 7,
+  motorSpeedType    = 8,
 };
 
 /* ---===== 2 - Decoding functions =====--- */
@@ -367,6 +368,26 @@ static void positionDecoder(setpoint_t *setpoint, uint8_t type, const void *data
   setpoint->attitude.yaw = values->yaw;
 }
 
+/* motorSpeedDecoder
+ * Set the motor speed directly
+ */
+ struct motorSpeedPacket_s {
+   uint16_t ratio_m1;
+   uint16_t ratio_m2;
+   uint16_t ratio_m3;
+   uint16_t ratio_m4;
+ } __attribute__((packed));
+static void motorSpeedDecoder(setpoint_t *setpoint, uint8_t type, const void *data, size_t datalen)
+{
+  const struct motorSpeedPacket_s *values = data;
+
+  setpoint->mode.directMotorControl = true;
+  setpoint->motorRatios[0] = values->ratio_m1;
+  setpoint->motorRatios[1] = values->ratio_m2;
+  setpoint->motorRatios[2] = values->ratio_m3;
+  setpoint->motorRatios[3] = values->ratio_m4;
+}
+
  /* ---===== 3 - packetDecoders array =====--- */
 const static packetDecoder_t packetDecoders[] = {
   [stopType]          = stopDecoder,
@@ -377,6 +398,7 @@ const static packetDecoder_t packetDecoders[] = {
   [hoverType]         = hoverDecoder,
   [fullStateType]     = fullStateDecoder,
   [positionType]      = positionDecoder,
+  [motorSpeedType]    = motorSpeedDecoder,
 };
 
 /* Decoder switch */

@@ -166,6 +166,8 @@ typedef struct setpoint_s {
   acc_t acceleration;       // m/s^2
   bool velocity_body;       // true if velocity is given in body frame; false if velocity is given in world frame
 
+  uint16_t motorRatios[4];  // motor ratio for direct control
+
   struct {
     stab_mode_t x;
     stab_mode_t y;
@@ -174,6 +176,7 @@ typedef struct setpoint_s {
     stab_mode_t pitch;
     stab_mode_t yaw;
     stab_mode_t quat;
+    bool directMotorControl;
   } mode;
 } setpoint_t;
 

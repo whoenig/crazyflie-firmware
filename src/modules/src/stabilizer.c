@@ -49,6 +49,8 @@
 #include "estimator_kalman.h"
 #include "estimator.h"
 
+#include "quatcompress.h"
+
 static bool isInit;
 static bool emergencyStop = false;
 static int emergencyStopTimeout = EMERGENCY_STOP_TIMEOUT_DISABLED;
@@ -73,6 +75,27 @@ typedef enum { configureAcc, measureNoiseFloor, measureProp, testBattery, restar
 #else
   static TestState testState = testDone;
 #endif
+
+static struct {
+  // position - mm
+  int16_t x;
+  int16_t y;
+  int16_t z;
+  // velocity - mm / sec
+  int16_t vx;
+  int16_t vy;
+  int16_t vz;
+  // acceleration - mm / sec^2
+  int16_t ax;
+  int16_t ay;
+  int16_t az;
+  // compressed quaternion, see quatcompress.h
+  int32_t quat;
+  // angular velocity - milliradians / sec
+  int16_t rateRoll;
+  int16_t ratePitch;
+  int16_t rateYaw;
+} stateCompressed;
 
 static void stabilizerTask(void* param);
 static void testProps(sensorData_t *sensors);
@@ -128,6 +151,33 @@ static void checkEmergencyStopTimeout()
   }
 }
 
+static void compressState()
+{
+  stateCompressed.x = state.position.x * 1000.0f;
+  stateCompressed.y = state.position.y * 1000.0f;
+  stateCompressed.z = state.position.z * 1000.0f;
+
+  stateCompressed.vx = state.velocity.x * 1000.0f;
+  stateCompressed.vy = state.velocity.y * 1000.0f;
+  stateCompressed.vz = state.velocity.z * 1000.0f;
+
+  stateCompressed.ax = state.acc.x * 1000.0f;
+  stateCompressed.ay = state.acc.y * 1000.0f;
+  stateCompressed.az = state.acc.z * 1000.0f;
+
+  float const q[4] = {
+    state.attitudeQuaternion.x,
+    state.attitudeQuaternion.y,
+    state.attitudeQuaternion.z,
+    state.attitudeQuaternion.w};
+  stateCompressed.quat = quatcompress(q);
+
+  float const deg2millirad = ((float)M_PI * 1000.0f) / 180.0f;
+  stateCompressed.rateRoll = sensorData.gyro.x * deg2millirad;
+  stateCompressed.ratePitch = -sensorData.gyro.y * deg2millirad;
+  stateCompressed.rateYaw = sensorData.gyro.z * deg2millirad;
+}
+
 /* The stabilizer loop runs at 1kHz (stock) or 500Hz (kalman). It is the
  * responsibility of the different functions to run slower by skipping call
  * (ie. returning without modifying the output structure).
@@ -177,19 +227,35 @@ static void stabilizerTask(void* param)
 
       getExtPosition(&state);
       stateEstimator(&state, &sensorData, &control, tick);
-      
+      compressState();
+
       commanderGetSetpoint(&setpoint, &state);
 
-      sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
+      if (!setpoint.mode.directMotorControl) {
+        sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
 
-      controller(&control, &setpoint, &sensorData, &state, tick);
+        controller(&control, &setpoint, &sensorData, &state, tick);
 
-      checkEmergencyStopTimeout();
+        checkEmergencyStopTimeout();
 
-      if (emergencyStop) {
-        powerStop();
+        if (emergencyStop) {
+          powerStop();
+        } else {
+          powerDistribution(&control);
+        }
       } else {
-        powerDistribution(&control);
+
+        checkEmergencyStopTimeout();
+
+        if (emergencyStop) {
+          powerStop();
+        } else {
+          motorsSetRatio(MOTOR_M1, setpoint.motorRatios[0]);
+          motorsSetRatio(MOTOR_M2, setpoint.motorRatios[1]);
+          motorsSetRatio(MOTOR_M3, setpoint.motorRatios[2]);
+          motorsSetRatio(MOTOR_M4, setpoint.motorRatios[3]);
+        }
+
       }
     }
     calcSensorToOutputLatency(&sensorData);
@@ -489,7 +555,33 @@ LOG_GROUP_START(stateEstimate)
 LOG_ADD(LOG_FLOAT, x, &state.position.x)
 LOG_ADD(LOG_FLOAT, y, &state.position.y)
 LOG_ADD(LOG_FLOAT, z, &state.position.z)
+LOG_ADD(LOG_FLOAT, vx, &state.velocity.x)
+LOG_ADD(LOG_FLOAT, vy, &state.velocity.y)
+LOG_ADD(LOG_FLOAT, vz, &state.velocity.z)
+LOG_ADD(LOG_FLOAT, ax, &state.acc.x)
+LOG_ADD(LOG_FLOAT, ay, &state.acc.y)
+LOG_ADD(LOG_FLOAT, az, &state.acc.z)
+LOG_ADD(LOG_FLOAT, qx, &state.attitudeQuaternion.x)
+LOG_ADD(LOG_FLOAT, qy, &state.attitudeQuaternion.y)
+LOG_ADD(LOG_FLOAT, qz, &state.attitudeQuaternion.z)
+LOG_ADD(LOG_FLOAT, qw, &state.attitudeQuaternion.w)
 LOG_GROUP_STOP(stateEstimate)
+
+LOG_GROUP_START(stateCompressed)
+LOG_ADD(LOG_INT16, x, &stateCompressed.x)                 // position - mm
+LOG_ADD(LOG_INT16, y, &stateCompressed.y)
+LOG_ADD(LOG_INT16, z, &stateCompressed.z)
+LOG_ADD(LOG_INT16, vx, &stateCompressed.vx)               // velocity - mm / sec
+LOG_ADD(LOG_INT16, vy, &stateCompressed.vy)
+LOG_ADD(LOG_INT16, vz, &stateCompressed.vz)
+LOG_ADD(LOG_INT16, ax, &stateCompressed.ax)               // acceleration - mm / sec^2
+LOG_ADD(LOG_INT16, ay, &stateCompressed.ay)
+LOG_ADD(LOG_INT16, az, &stateCompressed.az)
+LOG_ADD(LOG_INT32, quat, &stateCompressed.quat)           // compressed quaternion, see quatcompress.h
+LOG_ADD(LOG_INT16, rateRoll, &stateCompressed.rateRoll)   // angular velocity - milliradians / sec
+LOG_ADD(LOG_INT16, ratePitch, &stateCompressed.ratePitch)
+LOG_ADD(LOG_INT16, rateYaw, &stateCompressed.rateYaw)
+LOG_GROUP_STOP(stateCompressed)
 
 LOG_GROUP_START(latency)
 LOG_ADD(LOG_UINT32, intToOut, &inToOutLatency)
