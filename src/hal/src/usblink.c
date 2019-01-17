@@ -44,7 +44,6 @@
 
 static bool isInit = false;
 static xQueueHandle crtpPacketDelivery;
-static uint8_t sendBuffer[64];
 
 static int usblinkSendPacket(CRTPPacket *p);
 static int usblinkSetEnable(bool enable);
@@ -91,22 +90,12 @@ static int usblinkReceiveCRTPPacket(CRTPPacket *p)
 
 static int usblinkSendPacket(CRTPPacket *p)
 {
-  int dataSize;
-
   ASSERT(p->size < SYSLINK_MTU);
-
-  sendBuffer[0] = p->header;
-
-  if (p->size <= CRTP_MAX_DATA_SIZE)
-  {
-    memcpy(&sendBuffer[1], p->data, p->size);
-  }
-  dataSize = p->size + 1;
 
 
   ledseqRun(LINK_DOWN_LED, seq_linkup);
 
-  return usbSendData(dataSize, sendBuffer);
+  return usbSendData(p->size+1, p->raw);
 }
 
 static int usblinkSetEnable(bool enable)
