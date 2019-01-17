@@ -805,8 +805,6 @@ void logRunBlock(void * arg)
     ops = ops->next;
   }
 
-  xSemaphoreGive(logLock);
-
   // Check if the connection is still up, oherwise disable
   // all the logging and flush all the CRTP queues.
   if (!crtpIsConnected())
@@ -818,6 +816,8 @@ void logRunBlock(void * arg)
   {
     crtpSendPacket(&pk);
   }
+
+  xSemaphoreGive(logLock);
 }
 
 static int variableGetIndex(int id)
