@@ -71,6 +71,7 @@
 
 #include "math.h"
 #include "cf_math.h"
+#include "math3d.h"
 
 //#define KALMAN_USE_BARO_UPDATE
 //#define KALMAN_NAN_CHECK
@@ -127,6 +128,16 @@ static void stateEstimatorUpdateWithPosition(positionMeasurement_t *pos);
 
 static inline bool stateEstimatorHasPositionMeasurement(positionMeasurement_t *pos) {
   return (pdTRUE == xQueueReceive(posDataQueue, pos, 0));
+}
+
+// Direct measurements of Crazyflie pose
+static xQueueHandle poseDataQueue;
+#define POSE_QUEUE_LENGTH (10)
+
+static void stateEstimatorUpdateWithPose(poseMeasurement_t *pose);
+
+static inline bool stateEstimatorHasPoseMeasurement(poseMeasurement_t *pose) {
+  return (pdTRUE == xQueueReceive(poseDataQueue, pose, 0));
 }
 
 // Measurements of a UWB Tx/Rx
@@ -502,6 +513,13 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
   while (stateEstimatorHasPositionMeasurement(&pos))
   {
     stateEstimatorUpdateWithPosition(&pos);
+    doneUpdate = true;
+  }
+
+  poseMeasurement_t pose;
+  while (stateEstimatorHasPoseMeasurement(&pose))
+  {
+    stateEstimatorUpdateWithPose(&pose);
     doneUpdate = true;
   }
 
@@ -954,6 +972,34 @@ static void stateEstimatorUpdateWithPosition(positionMeasurement_t *xyz)
   }
 }
 
+static void stateEstimatorUpdateWithPose(poseMeasurement_t *pose)
+{
+  // a direct measurement of states x, y, and z, and orientation
+  // do a scalar update for each state, since this should be faster than updating all together
+  for (int i=0; i<3; i++) {
+    float h[STATE_DIM] = {0};
+    arm_matrix_instance_f32 H = {1, STATE_DIM, h};
+    h[STATE_X+i] = 1;
+    stateEstimatorScalarUpdate(&H, pose->pos[i] - S[STATE_X+i], pose->stdDevPos);
+  }
+
+  // compute orientation error
+  struct quat const q_ekf = mkquat(q[1], q[2], q[3], q[0]);
+  struct quat const q_measured = mkquat(pose->quat.x, pose->quat.y, pose->quat.z, pose->quat.w);
+  struct quat const q_residual = qqmul(qinv(q_ekf), q_measured);
+  // small angle approximation, see eq. 141 in http://mars.cs.umn.edu/tr/reports/Trawny05b.pdf
+  struct vec const err_quat = vscl(2.0f / q_residual.w, quatimagpart(q_residual));
+
+  // do a scalar update for each state
+  for (int i=0; i<3; i++) {
+    float h[STATE_DIM] = {0};
+    arm_matrix_instance_f32 H = {1, STATE_DIM, h};
+    h[STATE_D0+i] = 1;
+    stateEstimatorScalarUpdate(&H, ((float*)&err_quat.x)[i], pose->stdDevQuat);
+  }
+
+}
+
 static void stateEstimatorUpdateWithDistance(distanceMeasurement_t *d)
 {
   // a measurement of distance to point (x, y, z)
@@ -1335,6 +1381,7 @@ void estimatorKalmanInit(void) {
   {
     distDataQueue = xQueueCreate(DIST_QUEUE_LENGTH, sizeof(distanceMeasurement_t));
     posDataQueue = xQueueCreate(POS_QUEUE_LENGTH, sizeof(positionMeasurement_t));
+    poseDataQueue = xQueueCreate(POSE_QUEUE_LENGTH, sizeof(poseMeasurement_t));
     tdoaDataQueue = xQueueCreate(UWB_QUEUE_LENGTH, sizeof(tdoaMeasurement_t));
     flowDataQueue = xQueueCreate(FLOW_QUEUE_LENGTH, sizeof(flowMeasurement_t));
     tofDataQueue = xQueueCreate(TOF_QUEUE_LENGTH, sizeof(tofMeasurement_t));
@@ -1344,6 +1391,7 @@ void estimatorKalmanInit(void) {
   {
     xQueueReset(distDataQueue);
     xQueueReset(posDataQueue);
+    xQueueReset(poseDataQueue);
     xQueueReset(tdoaDataQueue);
     xQueueReset(flowDataQueue);
     xQueueReset(tofDataQueue);
@@ -1441,6 +1489,12 @@ bool estimatorKalmanEnqueuePosition(const positionMeasurement_t *pos)
 {
   ASSERT(isInit);
   return stateEstimatorEnqueueExternalMeasurement(posDataQueue, (void *)pos);
+}
+
+bool estimatorKalmanEnqueuePose(const poseMeasurement_t *pose)
+{
+  ASSERT(isInit);
+  return stateEstimatorEnqueueExternalMeasurement(poseDataQueue, (void *)pose);
 }
 
 bool estimatorKalmanEnqueueDistance(const distanceMeasurement_t *dist)

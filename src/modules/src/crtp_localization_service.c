@@ -41,6 +41,7 @@
 #include "locodeck.h"
 
 #include "estimator.h"
+#include "quatcompress.h"
 
 #define NBR_OF_RANGES_IN_PACKET   5
 #define DEFAULT_EMERGENCY_STOP_TIMEOUT (1 * RATE_MAIN_LOOP)
@@ -50,6 +51,7 @@ typedef enum
   EXT_POSITION        = 0,
   GENERIC_TYPE        = 1,
   EXT_POSITION_PACKED = 2,
+  EXT_POSE_PACKED     = 3,
 } locsrvChannels_t;
 
 typedef struct
@@ -70,12 +72,25 @@ typedef struct {
   int16_t z; // mm
 } __attribute__((packed)) extPositionPackedItem;
 
+// up to 2 items per CRTP packet
+typedef struct {
+  uint8_t id; // last 8 bit of the Crazyflie address
+  int16_t x; // mm
+  int16_t y; // mm
+  int16_t z; // mm
+  uint32_t quat; // compressed quaternion, see quatcompress.h
+} __attribute__((packed)) extPosePackedItem;
+
 // Struct for logging position information
 static positionMeasurement_t ext_pos;
+// Struct for logging pose information
+static poseMeasurement_t ext_pose;
+
 static CRTPPacket pkRange;
 static uint8_t rangeIndex;
 static bool enableRangeStreamFloat = false;
 static float extPosStdDev = 0.01;
+static float extQuatStdDev = 0.01;
 static bool isInit = false;
 static uint8_t my_id;
 
@@ -83,6 +98,7 @@ static void locSrvCrtpCB(CRTPPacket* pk);
 static void extPositionHandler(CRTPPacket* pk);
 static void genericLocHandle(CRTPPacket* pk);
 static void extPositionPackedHandler(CRTPPacket* pk);
+static void extPosePackedHandler(CRTPPacket* pk);
 
 void locSrvInit()
 {
@@ -108,6 +124,8 @@ static void locSrvCrtpCB(CRTPPacket* pk)
       genericLocHandle(pk);
     case EXT_POSITION_PACKED:
       extPositionPackedHandler(pk);
+    case EXT_POSE_PACKED:
+      extPosePackedHandler(pk);
     default:
       break;
   }
@@ -161,6 +179,25 @@ static void extPositionPackedHandler(CRTPPacket* pk)
   }
 }
 
+static void extPosePackedHandler(CRTPPacket* pk)
+{
+  uint8_t numItems = pk->size / sizeof(extPosePackedItem);
+  for (uint8_t i = 0; i < numItems; ++i) {
+    const extPosePackedItem* item = (const extPosePackedItem*)&pk->data[i * sizeof(extPosePackedItem)];
+    if (item->id == my_id) {
+      ext_pose.x = item->x / 1000.0f;
+      ext_pose.y = item->y / 1000.0f;
+      ext_pose.z = item->z / 1000.0f;
+      quatdecompress(item->quat, (float *)&ext_pose.quat.q0);
+      ext_pose.stdDevPos = extPosStdDev;
+      ext_pose.stdDevQuat = extQuatStdDev;
+      estimatorEnqueuePose(&ext_pose);
+
+      break;
+    }
+  }
+}
+
 void locSrvSendPacket(locsrv_t type, uint8_t *data, uint8_t length)
 {
   CRTPPacket pk;
@@ -206,4 +243,5 @@ LOG_GROUP_STOP(ext_pos)
 PARAM_GROUP_START(locSrv)
   PARAM_ADD(PARAM_UINT8, enRangeStreamFP32, &enableRangeStreamFloat)
   PARAM_ADD(PARAM_FLOAT, extPosStdDev, &extPosStdDev)
+  PARAM_ADD(PARAM_FLOAT, extQuatStdDev, &extQuatStdDev)
 PARAM_GROUP_STOP(locSrv)
