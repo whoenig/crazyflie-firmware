@@ -129,7 +129,7 @@ static void locSrvCrtpCB(CRTPPacket* pk)
 
 static void extPositionHandler(CRTPPacket* pk)
 {
-  const struct CrtpExtPosition* data = (const struct CrtpExtPosition*)pk;
+  const struct CrtpExtPosition* data = (const struct CrtpExtPosition*)pk->data;
 
   ext_pos.x = data->x;
   ext_pos.y = data->y;

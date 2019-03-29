@@ -47,6 +47,7 @@
 #include "power_distribution.h"
 
 #include "estimator.h"
+#include "usddeck.h"
 
 static bool isInit;
 static bool emergencyStop = false;
@@ -141,6 +142,8 @@ static void stabilizerTask(void* param)
   //Wait for the system to be fully started to start stabilization loop
   systemWaitStart();
 
+  DEBUG_PRINT("Wait for sensor calibration...\n");
+
   // Wait for sensors to be calibrated
   lastWakeTime = xTaskGetTickCount ();
   while(!sensorsAreCalibrated()) {
@@ -148,6 +151,8 @@ static void stabilizerTask(void* param)
   }
   // Initialize tick to something else then 0
   tick = 1;
+
+  DEBUG_PRINT("Ready to fly.\n");
 
   while(1) {
     // The sensor should unlock at 1kHz
@@ -188,6 +193,13 @@ static void stabilizerTask(void* param)
         powerStop();
       } else {
         powerDistribution(&control);
+      }
+
+      // Log data to uSD card if configured
+      if (   usddeckLoggingEnabled()
+          && usddeckLoggingMode() == usddeckLoggingMode_SynchronousStabilizer
+          && RATE_DO_EXECUTE(usddeckFrequency(), tick)) {
+        usddeckTriggerLogging();
       }
     }
     calcSensorToOutputLatency(&sensorData);
