@@ -51,7 +51,6 @@ typedef enum
   EXT_POSITION        = 0,
   GENERIC_TYPE        = 1,
   EXT_POSITION_PACKED = 2,
-  EXT_POSE_PACKED     = 3,
 } locsrvChannels_t;
 
 typedef struct
@@ -90,7 +89,7 @@ static CRTPPacket pkRange;
 static uint8_t rangeIndex;
 static bool enableRangeStreamFloat = false;
 static float extPosStdDev = 0.01;
-static float extQuatStdDev = 0.01;
+static float extQuatStdDev = 4.5e-3;
 static bool isInit = false;
 static uint8_t my_id;
 
@@ -98,7 +97,6 @@ static void locSrvCrtpCB(CRTPPacket* pk);
 static void extPositionHandler(CRTPPacket* pk);
 static void genericLocHandle(CRTPPacket* pk);
 static void extPositionPackedHandler(CRTPPacket* pk);
-static void extPosePackedHandler(CRTPPacket* pk);
 
 void locSrvInit()
 {
@@ -124,8 +122,6 @@ static void locSrvCrtpCB(CRTPPacket* pk)
       genericLocHandle(pk);
     case EXT_POSITION_PACKED:
       extPositionPackedHandler(pk);
-    case EXT_POSE_PACKED:
-      extPosePackedHandler(pk);
     default:
       break;
   }
@@ -159,6 +155,34 @@ static void genericLocHandle(CRTPPacket* pk)
     stabilizerSetEmergencyStop();
   } else if (type == EMERGENCY_STOP_WATCHDOG) {
     stabilizerSetEmergencyStopTimeout(DEFAULT_EMERGENCY_STOP_TIMEOUT);
+  } else if (type == EXT_POSE) {
+    const struct CrtpExtPose* data = (const struct CrtpExtPose*)&pk->data[1];
+    ext_pose.x = data->x;
+    ext_pose.y = data->y;
+    ext_pose.z = data->z;
+    ext_pose.quat.x = data->qx;
+    ext_pose.quat.y = data->qy;
+    ext_pose.quat.z = data->qz;
+    ext_pose.quat.w = data->qw;
+    ext_pose.stdDevPos = extPosStdDev;
+    ext_pose.stdDevQuat = extQuatStdDev;
+    estimatorEnqueuePose(&ext_pose);
+  } else if (type == EXT_POSE_PACKED) {
+    uint8_t numItems = (pk->size - 1) / sizeof(extPosePackedItem);
+    for (uint8_t i = 0; i < numItems; ++i) {
+      const extPosePackedItem* item = (const extPosePackedItem*)&pk->data[1 + i * sizeof(extPosePackedItem)];
+      if (item->id == my_id) {
+        ext_pose.x = item->x / 1000.0f;
+        ext_pose.y = item->y / 1000.0f;
+        ext_pose.z = item->z / 1000.0f;
+        quatdecompress(item->quat, (float *)&ext_pose.quat.q0);
+        ext_pose.stdDevPos = extPosStdDev;
+        ext_pose.stdDevQuat = extQuatStdDev;
+        estimatorEnqueuePose(&ext_pose);
+
+        break;
+      }
+    }
   }
 }
 
@@ -173,25 +197,6 @@ static void extPositionPackedHandler(CRTPPacket* pk)
       ext_pos.z = item->z / 1000.0f;
       ext_pos.stdDev = extPosStdDev;
       estimatorEnqueuePosition(&ext_pos);
-
-      break;
-    }
-  }
-}
-
-static void extPosePackedHandler(CRTPPacket* pk)
-{
-  uint8_t numItems = pk->size / sizeof(extPosePackedItem);
-  for (uint8_t i = 0; i < numItems; ++i) {
-    const extPosePackedItem* item = (const extPosePackedItem*)&pk->data[i * sizeof(extPosePackedItem)];
-    if (item->id == my_id) {
-      ext_pose.x = item->x / 1000.0f;
-      ext_pose.y = item->y / 1000.0f;
-      ext_pose.z = item->z / 1000.0f;
-      quatdecompress(item->quat, (float *)&ext_pose.quat.q0);
-      ext_pose.stdDevPos = extPosStdDev;
-      ext_pose.stdDevQuat = extQuatStdDev;
-      estimatorEnqueuePose(&ext_pose);
 
       break;
     }
