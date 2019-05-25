@@ -61,12 +61,18 @@
 #endif
 
 baseStationGeometry_t lighthouseBaseStationsGeometry[2]  = {
-  {.origin = {-1.866722, 2.229666, 1.521226, }, .mat = {{0.710527, 0.378001, -0.593521, }, {0.027454, 0.827931, 0.560158, }, {0.703134, -0.414302, 0.577889, }, }},
-  {.origin = {2.158244, 2.287099, -1.858179, }, .mat = {{-0.645509, -0.380170, 0.662412, }, {0.017664, 0.859648, 0.510581, }, {-0.763548, 0.341286, -0.548195, }, }},
+{.origin = {-0.542299, 3.152727, 1.958483, }, .mat = {{0.999975, -0.007080, -0.000000, }, {0.005645, 0.797195, 0.603696, }, {-0.004274, -0.603681, 0.797215, }, }},
+{.origin = {2.563488, 3.112367, -1.062398, }, .mat = {{0.034269, -0.647552, 0.761251, }, {-0.012392, 0.761364, 0.648206, }, {-0.999336, -0.031647, 0.018067, }, }},
 };
 
+// Uncomment if you want to force the Crazyflie to reflash the deck at each startup
+// #define FORCE_FLASH true
 
 #if DISABLE_LIGHTHOUSE_DRIVER == 0
+
+#ifndef FORCE_FLASH
+#define FORCE_FLASH false
+#endif
 
 #define STR2(x) #x
 #define STR(x) STR2(x)
@@ -155,6 +161,8 @@ static void calculateStats(uint32_t nowMs) {
 
 static vec3d position;
 static positionMeasurement_t ext_pos;
+static float deltaLog;
+
 static void estimatePosition(pulseProcessorResult_t angles[]) {
   memset(&ext_pos, 0, sizeof(ext_pos));
   int sensorsUsed = 0;
@@ -163,7 +171,9 @@ static void estimatePosition(pulseProcessorResult_t angles[]) {
   // Average over all sensors with valid data
   for (size_t sensor = 0; sensor < PULSE_PROCESSOR_N_SENSORS; sensor++) {
       if (angles[sensor].validCount == 4) {
-        lighthouseGeometryGetPosition(lighthouseBaseStationsGeometry, (void*)angles[sensor].angles, position, &delta);
+        lighthouseGeometryGetPosition(lighthouseBaseStationsGeometry, (void*)angles[sensor].correctedAngles, position, &delta);
+
+        deltaLog = delta;
 
         ext_pos.x -= position[2];
         ext_pos.y -= position[0];
@@ -241,6 +251,9 @@ static void lighthouseTask(void *param)
         frameCount++;
         if (basestation == 1 && axis == 1) {
           cycleCount++;
+
+          pulseProcessorApplyCalibration(&ppState, angles);
+
           estimatePosition(angles);
           for (size_t sensor = 0; sensor < PULSE_PROCESSOR_N_SENSORS; sensor++) {
             angles[sensor].validCount = 0;
@@ -274,7 +287,7 @@ static void checkVersionAndBoot()
   lhblFlashWakeup();
   vTaskDelay(M2T(1));
 
-  // Checking if first and last 64 bytes of bitstream are identical
+  // Checking the bitstreams are identical
   // Also decoding bitstream version for console
   static char deckBitstream[65];
   lhblFlashRead(LH_FW_ADDR, 64, (uint8_t*)deckBitstream);
@@ -283,18 +296,17 @@ static void checkVersionAndBoot()
   int embeddedVersion = strtol((char*)&bitstream[2], NULL, 10);
 
   bool identical = true;
-  if (memcmp(deckBitstream, bitstream, 64)) {
-    DEBUG_PRINT("Fail comparing begining\n");
-    identical = false;
+  for (int i=0; i<=bitstreamSize; i+=64) {
+    int length = ((i+64)<bitstreamSize)?64:bitstreamSize-i;
+    lhblFlashRead(LH_FW_ADDR + i, length, (uint8_t*)deckBitstream);
+    if (memcmp(deckBitstream, &bitstream[i], length)) {
+      DEBUG_PRINT("Fail comparing firmware\n");
+      identical = false;
+      break;
+    }
   }
 
-  lhblFlashRead(LH_FW_ADDR + (bitstreamSize - 64), 64, (uint8_t*)deckBitstream);
-  if (memcmp(deckBitstream, &bitstream[(bitstreamSize - 64)], 64)) {
-    DEBUG_PRINT("Fail comparing end\n");
-    identical = false;
-  }
-
-  if (identical == false) {
+  if (identical == false || FORCE_FLASH) {
     DEBUG_PRINT("Deck has version %d and we embeed version %d\n", deckVersion, embeddedVersion);
     DEBUG_PRINT("Updating deck with embedded version!\n");
 
@@ -322,7 +334,7 @@ static void lighthouseInit(DeckInfo *info)
   lhblInit(I2C1_DEV);
   
   xTaskCreate(lighthouseTask, "LH",
-              configMINIMAL_STACK_SIZE, NULL, /*priority*/1, NULL);
+              2*configMINIMAL_STACK_SIZE, NULL, /*priority*/1, NULL);
 
   isInit = true;
 }
@@ -343,13 +355,35 @@ static const DeckDriver lighthouse_deck = {
 DECK_DRIVER(lighthouse_deck);
 
 LOG_GROUP_START(lighthouse)
-LOG_ADD(LOG_FLOAT, angle0x, &angles[0].angles[0][0])
-LOG_ADD(LOG_FLOAT, angle0y, &angles[0].angles[0][1])
-LOG_ADD(LOG_FLOAT, angle1x, &angles[0].angles[1][0])
-LOG_ADD(LOG_FLOAT, angle1y, &angles[0].angles[1][1])
+LOG_ADD(LOG_FLOAT, rawAngle0x, &angles[0].angles[0][0])
+LOG_ADD(LOG_FLOAT, rawAngle0y, &angles[0].angles[0][1])
+LOG_ADD(LOG_FLOAT, rawAngle1x, &angles[0].angles[1][0])
+LOG_ADD(LOG_FLOAT, rawAngle1y, &angles[0].angles[1][1])
+LOG_ADD(LOG_FLOAT, angle0x, &angles[0].correctedAngles[0][0])
+LOG_ADD(LOG_FLOAT, angle0y, &angles[0].correctedAngles[0][1])
+LOG_ADD(LOG_FLOAT, angle1x, &angles[0].correctedAngles[1][0])
+LOG_ADD(LOG_FLOAT, angle1y, &angles[0].correctedAngles[1][1])
+
+LOG_ADD(LOG_FLOAT, angle0x_1, &angles[1].correctedAngles[0][0])
+LOG_ADD(LOG_FLOAT, angle0y_1, &angles[1].correctedAngles[0][1])
+LOG_ADD(LOG_FLOAT, angle1x_1, &angles[1].correctedAngles[1][0])
+LOG_ADD(LOG_FLOAT, angle1y_1, &angles[1].correctedAngles[1][1])
+
+LOG_ADD(LOG_FLOAT, angle0x_2, &angles[2].correctedAngles[0][0])
+LOG_ADD(LOG_FLOAT, angle0y_2, &angles[2].correctedAngles[0][1])
+LOG_ADD(LOG_FLOAT, angle1x_2, &angles[2].correctedAngles[1][0])
+LOG_ADD(LOG_FLOAT, angle1y_2, &angles[2].correctedAngles[1][1])
+
+LOG_ADD(LOG_FLOAT, angle0x_3, &angles[3].correctedAngles[0][0])
+LOG_ADD(LOG_FLOAT, angle0y_3, &angles[3].correctedAngles[0][1])
+LOG_ADD(LOG_FLOAT, angle1x_3, &angles[3].correctedAngles[1][0])
+LOG_ADD(LOG_FLOAT, angle1y_3, &angles[3].correctedAngles[1][1])
+
 LOG_ADD(LOG_FLOAT, x, &position[0])
 LOG_ADD(LOG_FLOAT, y, &position[1])
 LOG_ADD(LOG_FLOAT, z, &position[2])
+
+LOG_ADD(LOG_FLOAT, delta, &deltaLog)
 
 LOG_ADD(LOG_FLOAT, serRt, &serialFrameRate)
 LOG_ADD(LOG_FLOAT, frmRt, &frameRate)
