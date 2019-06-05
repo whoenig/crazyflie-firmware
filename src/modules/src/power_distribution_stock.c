@@ -100,10 +100,22 @@ void powerDistribution(const control_t *control)
   }
   else
   {
-    motorsSetRatio(MOTOR_M1, motorPower.m1);
-    motorsSetRatio(MOTOR_M2, motorPower.m2);
-    motorsSetRatio(MOTOR_M3, motorPower.m3);
-    motorsSetRatio(MOTOR_M4, motorPower.m4);
+    if (!control->enableDirectThrust) {
+      motorsSetRatio(MOTOR_M1, motorPower.m1);
+      motorsSetRatio(MOTOR_M2, motorPower.m2);
+      motorsSetRatio(MOTOR_M3, motorPower.m3);
+      motorsSetRatio(MOTOR_M4, motorPower.m4);
+    } else {
+      motorPower.m1 = control->motorRatios[0];
+      motorPower.m2 = control->motorRatios[1];
+      motorPower.m3 = control->motorRatios[2];
+      motorPower.m4 = control->motorRatios[3];
+
+      motorsSetRatio(MOTOR_M1, control->motorRatios[0]);
+      motorsSetRatio(MOTOR_M2, control->motorRatios[1]);
+      motorsSetRatio(MOTOR_M3, control->motorRatios[2]);
+      motorsSetRatio(MOTOR_M4, control->motorRatios[3]);
+    }
   }
 }
 

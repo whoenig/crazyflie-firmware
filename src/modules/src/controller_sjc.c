@@ -44,7 +44,7 @@ Notes:
 
 // #define GRAVITY_MAGNITUDE (9.81f)
 
-// static float g_vehicleMass = 0.032; // TODO: should be CF global for other modules
+static float g_vehicleMass = 0.032; // TODO: should be CF global for other modules
 
 // Attitude P-gain
 static float k1 = 5e-4;
@@ -56,11 +56,16 @@ static float l1 = 5;
 static float l2 = 5;
 static float l3 = 1;
 
-// Inertia matrix
-// TODO: WH find parameters from ETH thesis
-static float Ixx;
-static float Iyy;
-static float Izz;
+// Inertia matrix, see
+// System Identification of the Crazyflie 2.0 Nano Quadrocopter
+// BA theses, Julian Foerster, ETHZ
+// https://polybox.ethz.ch/index.php/s/20dde63ee00ffe7085964393a55a91c7
+static float Ixx = 16.571710e-6; // kg m^2
+static float Iyy = 16.655602e-6; // kg m^2
+static float Izz = 29.261652e-6; // kg m^2
+
+// logging variables
+static struct vec moment;
 
 void controllerSJCReset(void)
 {
@@ -85,16 +90,29 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
     return;
   }
 
-  // dt = (float)(1.0f/ATTITUDE_RATE);
+  float dt = (float)(1.0f/ATTITUDE_RATE);
+
+  // Rate-controlled YAW is moving YAW angle setpoint
+  float desiredYaw = 0; //deg
+  if (setpoint->mode.yaw == modeVelocity) {
+    desiredYaw = state->attitude.yaw + setpoint->attitudeRate.yaw * dt;
+  } else if (setpoint->mode.yaw == modeAbs) {
+    desiredYaw = setpoint->attitude.yaw;
+  } else if (setpoint->mode.quat == modeAbs) {
+    struct quat setpoint_quat = mkquat(setpoint->attitudeQuaternion.x, setpoint->attitudeQuaternion.y, setpoint->attitudeQuaternion.z, setpoint->attitudeQuaternion.w);
+    struct vec rpy = quat2rpy(setpoint_quat);
+    desiredYaw = degrees(rpy.z);
+  }
 
   // Attitude controller
 
   float phi = radians(state->attitude.roll);
-  float theta = radians(-state->attitude.pitch); // TODO WH: should this be negative?
+  // This is in the legacy coordinate system where pitch is inverted
+  float theta = radians(-state->attitude.pitch);
   float psi = radians(state->attitude.yaw);
 
   float omega_x = radians(sensors->gyro.x);
-  float omega_y = -radians(sensors->gyro.y); // TODO WH: should this be negative?
+  float omega_y = radians(sensors->gyro.y);
   float omega_z = radians(sensors->gyro.z);
 
   // q_dot = Z(q)*omega
@@ -105,14 +123,14 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
   float psi_dot = sinf(phi)*omega_y/cosf(theta) + cosf(phi)*omega_z/cosf(theta);
 
   // Desired angles in radians
-  // TODO WH: need to add the hack for yaw here to convert setpoints properly
   float eulerRollDesired = radians(setpoint->attitude.roll);
-  float eulerPitchDesired = radians(setpoint->attitude.pitch);
-  float YawDotDesired = radians(setpoint->attitudeRate.yaw);
-  float eulerYawDesired = radians(setpoint->attitude.yaw);
+  // This is in the legacy coordinate system where pitch is inverted
+  float eulerPitchDesired = -radians(setpoint->attitude.pitch);
+  float eulerYawDesired = desiredYaw;
 
   float RollDotDesired = radians(setpoint->attitudeRate.roll);
   float PitchDotDesired = radians(setpoint->attitudeRate.pitch);
+  float YawDotDesired = radians(setpoint->attitudeRate.yaw);
   float RollDDotDesired = 0;
   float PitchDDotDesired = 0;
   float YawDDotDesired = 0;
@@ -137,28 +155,47 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
   float omega_r_2_dot = -sinf(phi)*phi_dot*qr2_dot + (cosf(phi)*cosf(theta)*phi_dot - sinf(phi)*sinf(theta)*theta_dot)*qr3_dot + cosf(phi)*qr2_ddot + sinf(phi)*cosf(theta)*qr3_ddot;
   float omega_r_3_dot = -cosf(phi)*phi_dot*qr2_dot + (-sinf(phi)*cosf(theta)*phi_dot - cosf(phi)*sinf(theta)*theta_dot)*qr3_dot - sinf(phi)*qr2_ddot + cosf(phi)*cosf(theta)*qr3_ddot;
 
+  // compute moments
   // u = J*omega_r_dot - S(J*omega)*omega_r - K(omega - omega_r)
   float actuatorRoll = Ixx*omega_r_1_dot - (-Izz*omega_z*omega_r_2 + Iyy*omega_y*omega_r_3) - k1*(omega_x - omega_r_1);
   float actuatorPitch = Iyy*omega_r_2_dot - (Izz*omega_z*omega_r_1 - Ixx*omega_x*omega_r_3) - k2*(omega_y - omega_r_2);
   float actuatorYaw = Izz*omega_r_3_dot - (-Iyy*omega_y*omega_r_1 + Ixx*omega_x*omega_r_2) - k3*(omega_z - omega_r_3);
 
-  // Output
+  // On CF2, thrust is mapped 65536 <==> 60 grams
+  float linAcc = 0.0; // vertical acceleration m/s^2
+  moment = mkvec(actuatorRoll, actuatorPitch, actuatorYaw);
   if (setpoint->mode.z == modeDisable) {
-    control->thrust = setpoint->thrust;
-  } else {
-    control->thrust = 0;//massThrust * current_thrust;
+    linAcc = setpoint->thrust / 65536.0f * 22.2f;
   }
 
-  if (control->thrust > 0) {
-    control->roll = clamp(actuatorRoll, -32000, 32000);
-    control->pitch = clamp(actuatorPitch, -32000, 32000);
-    control->yaw = clamp(actuatorYaw, -32000, 32000); // TODO: should be negative?
-  } else {
-    control->roll = 0;
-    control->pitch = 0;
-    control->yaw = 0;
-    controllerSJCReset();
+  // see https://github.com/jpreiss/libquadrotor/blob/master/src/quad_control.c
+  const float thrust_to_torque = 0.006f;
+  const float arm_length = 0.046f; // m
+  const float max_thrust = 0.15f; // N
+  const float thrustpart = 0.25f * (g_vehicleMass * linAcc); // N (per rotor)
+  const float yawpart = -0.25f * moment.z / thrust_to_torque;
+
+  float const arm = 0.707106781f * arm_length;
+  struct vec const moment_scl = vscl(0.25f / arm, moment);
+  float prop_forces[4];
+  prop_forces[0] = clamp(thrustpart - moment_scl.x - moment_scl.y + yawpart, 0, max_thrust);
+  prop_forces[1] = clamp(thrustpart - moment_scl.x + moment_scl.y - yawpart, 0, max_thrust);
+  prop_forces[2] = clamp(thrustpart + moment_scl.x + moment_scl.y + yawpart, 0, max_thrust);
+  prop_forces[3] = clamp(thrustpart + moment_scl.x - moment_scl.y - yawpart, 0, max_thrust);
+
+  // for CF2, motorratio directly maps to thrust (not rpm etc.)
+  control->enableDirectThrust = true;
+  for (int i = 0; i < 4; ++i) {
+    control->motorRatios[i] = prop_forces[i] / max_thrust * 65536;
   }
+
+  // if (control->thrust == 0) {
+  //   for (int i = 0; i < 4; ++i) {
+  //     control->motorRatios[i] = 0;
+  //   }
+  //   controllerSJCReset();
+  // }
+
 }
 
 PARAM_GROUP_START(ctrlSJC)
@@ -169,3 +206,9 @@ PARAM_ADD(PARAM_FLOAT, l1, &l1)
 PARAM_ADD(PARAM_FLOAT, l2, &l2)
 PARAM_ADD(PARAM_FLOAT, l3, &l3)
 PARAM_GROUP_STOP(ctrlSJC)
+
+LOG_GROUP_START(ctrlSJC)
+LOG_ADD(LOG_FLOAT, momentRoll, &moment.x)
+LOG_ADD(LOG_FLOAT, momentPitch, &moment.y)
+LOG_ADD(LOG_FLOAT, momentYaw, &moment.z)
+LOG_GROUP_STOP(ctrlSJC)
