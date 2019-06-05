@@ -71,7 +71,7 @@ void powerStop()
   motorsSetRatio(MOTOR_M4, 0);
 }
 
-void powerDistribution(const control_t *control)
+static void powerDistributionLegacy(const control_t *control)
 {
   #ifdef QUAD_FORMATION_X
     int16_t r = control->roll / 2.0f;
@@ -91,30 +91,65 @@ void powerDistribution(const control_t *control)
                                control->yaw);
   #endif
 
+  motorsSetRatio(MOTOR_M1, motorPower.m1);
+  motorsSetRatio(MOTOR_M2, motorPower.m2);
+  motorsSetRatio(MOTOR_M3, motorPower.m3);
+  motorsSetRatio(MOTOR_M4, motorPower.m4);
+}
+
+static void powerDistributionForceTorque(const control_t *control)
+{
+  // On CF2, thrust is mapped 65536 <==> 60 grams
+
+  // see https://github.com/jpreiss/libquadrotor/blob/master/src/quad_control.c
+  const float thrust_to_torque = 0.006f;
+  const float arm_length = 0.046f; // m
+  const float max_thrust = 0.15f; // N
+  const float thrustpart = 0.25f * control->thrustSI; // N (per rotor)
+  const float yawpart = -0.25f * control->torque[2] / thrust_to_torque;
+
+  float const arm = 0.707106781f * arm_length;
+  const float rollpart = 0.25f / arm * control->torque[0];
+  const float pitchpart = 0.25f / arm * control->torque[1];
+
+  // Thrust for each motor in N
+  float motorForce[4];
+  motorForce[0] = thrustpart - rollpart - pitchpart + yawpart;
+  motorForce[1] = thrustpart - rollpart + pitchpart - yawpart;
+  motorForce[2] = thrustpart + rollpart + pitchpart + yawpart;
+  motorForce[3] = thrustpart + rollpart - pitchpart - yawpart;
+
+  // for CF2, motorratio directly maps to thrust (not rpm etc.)
+  // Thus, we only need to scale the values here
+  motorPower.m1 = limitThrust(motorForce[0] / max_thrust * 65536);
+  motorPower.m2 = limitThrust(motorForce[1] / max_thrust * 65536);
+  motorPower.m3 = limitThrust(motorForce[2] / max_thrust * 65536);
+  motorPower.m4 = limitThrust(motorForce[3] / max_thrust * 65536);
+
+  motorsSetRatio(MOTOR_M1, motorPower.m1);
+  motorsSetRatio(MOTOR_M2, motorPower.m2);
+  motorsSetRatio(MOTOR_M3, motorPower.m3);
+  motorsSetRatio(MOTOR_M4, motorPower.m4);
+}
+
+void powerDistribution(const control_t *control)
+{
   if (motorSetEnable)
   {
     motorsSetRatio(MOTOR_M1, motorPowerSet.m1);
     motorsSetRatio(MOTOR_M2, motorPowerSet.m2);
     motorsSetRatio(MOTOR_M3, motorPowerSet.m3);
     motorsSetRatio(MOTOR_M4, motorPowerSet.m4);
-  }
-  else
-  {
-    if (!control->enableDirectThrust) {
-      motorsSetRatio(MOTOR_M1, motorPower.m1);
-      motorsSetRatio(MOTOR_M2, motorPower.m2);
-      motorsSetRatio(MOTOR_M3, motorPower.m3);
-      motorsSetRatio(MOTOR_M4, motorPower.m4);
-    } else {
-      motorPower.m1 = control->motorRatios[0];
-      motorPower.m2 = control->motorRatios[1];
-      motorPower.m3 = control->motorRatios[2];
-      motorPower.m4 = control->motorRatios[3];
+  } else {
 
-      motorsSetRatio(MOTOR_M1, control->motorRatios[0]);
-      motorsSetRatio(MOTOR_M2, control->motorRatios[1]);
-      motorsSetRatio(MOTOR_M3, control->motorRatios[2]);
-      motorsSetRatio(MOTOR_M4, control->motorRatios[3]);
+    switch (control->controlMode)
+    {
+      case controlModeLegacy:
+        powerDistributionLegacy(control);
+        break;
+      case controlModeForceTorque:
+        powerDistributionForceTorque(control);
+        break;
     }
   }
 }

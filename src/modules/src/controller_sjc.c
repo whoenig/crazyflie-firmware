@@ -168,34 +168,11 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
     linAcc = setpoint->thrust / 65536.0f * 22.2f;
   }
 
-  // see https://github.com/jpreiss/libquadrotor/blob/master/src/quad_control.c
-  const float thrust_to_torque = 0.006f;
-  const float arm_length = 0.046f; // m
-  const float max_thrust = 0.15f; // N
-  const float thrustpart = 0.25f * (g_vehicleMass * linAcc); // N (per rotor)
-  const float yawpart = -0.25f * moment.z / thrust_to_torque;
-
-  float const arm = 0.707106781f * arm_length;
-  struct vec const moment_scl = vscl(0.25f / arm, moment);
-  float prop_forces[4];
-  prop_forces[0] = clamp(thrustpart - moment_scl.x - moment_scl.y + yawpart, 0, max_thrust);
-  prop_forces[1] = clamp(thrustpart - moment_scl.x + moment_scl.y - yawpart, 0, max_thrust);
-  prop_forces[2] = clamp(thrustpart + moment_scl.x + moment_scl.y + yawpart, 0, max_thrust);
-  prop_forces[3] = clamp(thrustpart + moment_scl.x - moment_scl.y - yawpart, 0, max_thrust);
-
-  // for CF2, motorratio directly maps to thrust (not rpm etc.)
-  control->enableDirectThrust = true;
-  for (int i = 0; i < 4; ++i) {
-    control->motorRatios[i] = prop_forces[i] / max_thrust * 65536;
-  }
-
-  // if (control->thrust == 0) {
-  //   for (int i = 0; i < 4; ++i) {
-  //     control->motorRatios[i] = 0;
-  //   }
-  //   controllerSJCReset();
-  // }
-
+  control->controlMode = controlModeForceTorque;
+  control->thrustSI = g_vehicleMass * linAcc;
+  control->torque[0] = moment.x;
+  control->torque[1] = moment.y;
+  control->torque[2] = moment.z;
 }
 
 PARAM_GROUP_START(ctrlSJC)

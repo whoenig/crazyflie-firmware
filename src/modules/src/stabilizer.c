@@ -254,7 +254,7 @@ static void stabilizerTask(void* param)
       }
       // allow to update controller dynamically
       if (getControllerType() != controllerType) {
-        control.enableDirectThrust = false;
+        control.controlMode = controlModeLegacy;
         controllerInit(controllerType);
         controllerType = getControllerType();
       }
