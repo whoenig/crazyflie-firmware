@@ -31,8 +31,13 @@ IJRR 2016
 
 Notes:
   * There is a typo in the paper, in eq 71: It should be -K (omega - omega_r) (i.e., no dot)
+  * This implementation is inspired by the implementation of the controller by 
+    Giri P Subramanian for CF 1.0
 
-  * BIG TODO: swith to math3d after intial version works
+  * Runtime attitude controller: 6us
+
+  * BIG TODO2: switch to quaternion-based control
+  * BIG TODO3: position controller
 */
 
 #include <math.h>
@@ -46,23 +51,17 @@ Notes:
 
 static float g_vehicleMass = 0.032; // TODO: should be CF global for other modules
 
-// Attitude P-gain
-static float k1 = 5e-4;
-static float k2 = 5e-4;
-static float k3 = 5e-4;
+// Attitude D-gain (diagonal matrix)
+static struct vec K = {5e-4, 5e-4, 5e-4};
 
-// Attitude D-gain
-static float l1 = 5;
-static float l2 = 5;
-static float l3 = 1;
+// Attitude P-gain (diagonal matrix)
+static struct vec lambda = {5, 5, 1};
 
-// Inertia matrix, see
+// Inertia matrix (diagonal matrix), see
 // System Identification of the Crazyflie 2.0 Nano Quadrocopter
 // BA theses, Julian Foerster, ETHZ
 // https://polybox.ethz.ch/index.php/s/20dde63ee00ffe7085964393a55a91c7
-static float Ixx = 16.571710e-6; // kg m^2
-static float Iyy = 16.655602e-6; // kg m^2
-static float Izz = 29.261652e-6; // kg m^2
+static struct vec J = {16.571710e-6, 16.655602e-6, 29.261652e-6}; // kg m^2
 
 // logging variables
 static struct vec moment;
@@ -106,82 +105,96 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
 
   // Attitude controller
 
-  float phi = radians(state->attitude.roll);
-  // This is in the legacy coordinate system where pitch is inverted
-  float theta = radians(-state->attitude.pitch);
-  float psi = radians(state->attitude.yaw);
+  // q: vector of three-dimensional attitude representation
+  //    here: Euler angles in rad
+  struct vec q = mkvec(
+    radians(state->attitude.roll),
+    radians(-state->attitude.pitch), // This is in the legacy coordinate system where pitch is inverted
+    radians(state->attitude.yaw));
 
-  float omega_x = radians(sensors->gyro.x);
-  float omega_y = radians(sensors->gyro.y);
-  float omega_z = radians(sensors->gyro.z);
+  // omega: angular velocity in rad/s
+  struct vec omega = mkvec(
+    radians(sensors->gyro.x),
+    radians(sensors->gyro.y),
+    radians(sensors->gyro.z));
 
   // q_dot = Z(q)*omega
-  // TODO WH: check where Z(q) comes from
-  float phi_dot = omega_x + sinf(phi)*tanf(theta)*omega_y + cosf(phi)*tanf(theta)*omega_z;
-  float theta_dot = cosf(phi)*omega_y - sinf(phi)*omega_z;
-  // TODO WH: add check for division by zero?
-  float psi_dot = sinf(phi)*omega_y/cosf(theta) + cosf(phi)*omega_z/cosf(theta);
+  // For euler angles Z(q) is defined in Giri P Subramanian MS thesis, equation 8
+  //        [1  sin(r)tan(p)  cos(r)tan(p)]
+  // Z(q) = [0  cos(r)        -sin(r)     ]
+  //        [0  sin(r)sec(p)  cos(r)sec(p)]
+  // TODO: add check for division by zero?
+  struct vec q_dot = mkvec(
+    omega.x + sinf(q.x)*tanf(q.y)*omega.y + cosf(q.x)*tanf(q.y)*omega.z,
+              cosf(q.x)          *omega.y - sinf(q.x)          *omega.z,
+              sinf(q.x)/cosf(q.y)*omega.y + cosf(q.x)/cosf(q.y)*omega.z);
 
-  // Desired angles in radians
-  float eulerRollDesired = radians(setpoint->attitude.roll);
-  // This is in the legacy coordinate system where pitch is inverted
-  float eulerPitchDesired = -radians(setpoint->attitude.pitch);
-  float eulerYawDesired = radians(desiredYaw);
+  // qr: Desired/reference angles in rad
+  struct vec qr = mkvec(
+    radians(setpoint->attitude.roll),
+    -radians(setpoint->attitude.pitch), // This is in the legacy coordinate system where pitch is inverted
+    radians(desiredYaw));
 
-  float RollDotDesired = radians(setpoint->attitudeRate.roll);
-  float PitchDotDesired = radians(setpoint->attitudeRate.pitch);
-  float YawDotDesired = radians(setpoint->attitudeRate.yaw);
-  float RollDDotDesired = 0;
-  float PitchDDotDesired = 0;
-  float YawDDotDesired = 0;
+  // qr_dot desired/reference angular velocity in rad/s
+  struct vec qr_dot = mkvec(
+    radians(setpoint->attitudeRate.roll),
+    radians(setpoint->attitudeRate.pitch),
+    radians(setpoint->attitudeRate.yaw));
 
-  // qr dot
-  float qr1_dot = RollDotDesired + l1*(eulerRollDesired - phi);
-  float qr2_dot = PitchDotDesired + l2*(eulerPitchDesired - theta);
-  float qr3_dot = YawDotDesired + l3*(eulerYawDesired - psi);
+  // qr_ddot desired/reference angular acceleration in rad/s^2
+  struct vec qr_ddot = vzero();
 
-  // qr double dot
-  float qr1_ddot = RollDDotDesired + l1*(RollDotDesired - phi_dot);
-  float qr2_ddot = PitchDDotDesired + l2*(PitchDotDesired - theta_dot);
-  float qr3_ddot = YawDDotDesired + l3*(YawDotDesired - psi_dot);
+  // omega_r: desired/reference angular velocity in rad/s
+  // omega_r = Z(q)^-1 * (qr_dot + lambda (qr - q)) = Z(q)^-1 * qrp
+  // For euler angles Z(q)^-1 is:
+  //           [1  0       -sin(p)     ]
+  // Z(q)^-1 = [0  cos(r)  cos(p)sin(r)]
+  //           [0 -sin(r)  cos(p)cos(r)]
+  struct vec qrp = vadd(qr_dot, veltmul(lambda, vsub(qr, q)));
+  struct vec omega_r = mkvec(
+    qrp.x +                 -sinf(q.y)           *qrp.z,
+            cosf(q.x)*qrp.y + cosf(q.y)*sinf(q.x)*qrp.z,
+          - sinf(q.x)*qrp.y + cosf(q.y)*cosf(q.x)*qrp.z);
 
-  // omega_r = Z(q)^-1 * q_r_dot
-  float omega_r_1 = qr1_dot - sinf(theta)*qr3_dot;
-  float omega_r_2 = cosf(phi)*qr2_dot + sinf(phi)*cosf(theta)*qr3_dot;
-  float omega_r_3 = -sinf(phi)*qr2_dot + cosf(phi)*cosf(theta)*qr3_dot;
-  
-  // omega_r_dot = Z(q)^-1_dot*q_r_dot + Z(q)^-1*q_r_ddot
-  float omega_r_1_dot = -cosf(theta)*theta_dot*qr3_dot + qr1_ddot - sinf(theta)*qr3_ddot;
-  float omega_r_2_dot = -sinf(phi)*phi_dot*qr2_dot + (cosf(phi)*cosf(theta)*phi_dot - sinf(phi)*sinf(theta)*theta_dot)*qr3_dot + cosf(phi)*qr2_ddot + sinf(phi)*cosf(theta)*qr3_ddot;
-  float omega_r_3_dot = -cosf(phi)*phi_dot*qr2_dot + (-sinf(phi)*cosf(theta)*phi_dot - cosf(phi)*sinf(theta)*theta_dot)*qr3_dot - sinf(phi)*qr2_ddot + cosf(phi)*cosf(theta)*qr3_ddot;
+  // omegar_dot =   Z(q)^-1_dot*qr_dot         + Z(q)^-1*qr_ddot
+  //              + Z(q)^-1_dot*lambda(qr - q) + Z(q)^-1*lambda*(qr_dot - q_dot)
+  //            =   Z(q)^-1_dot (qr_dot + lambda (qr - q))
+  //              + Z(q)^-1 (qr_ddot + lambda (qr_dot - q_dot))
+  //            =   Z(q)^-1_dot qrp + Z(q)^-1 qrp_dot
+  // For euler angles Z(q)^-1_dot is:
+  //               [0  0            -cos(p)p_dot                        ]
+  // Z(q)^-1_dot = [0 -sin(r)r_dot  -sin(p)sin(r)p_dot+cos(p)cos(r)r_dot]
+  //               [0 -cos(r)r_dot  -cos(r)sin(p)p_dot-cos(p)sin(r)r_dot]
+  struct vec qrp_dot = vadd(qr_ddot, veltmul(lambda, vsub(qr_dot, q_dot)));
+  struct vec omega_r_dot = mkvec(
+                             -cosf(q.y)             *q_dot.y                             *qrp.z + qrp_dot.x                     -sinf(q.y)           *qrp_dot.z,
+    -sinf(q.x)*q_dot.x*qrp.y + (-sinf(q.y)*sinf(q.x)*q_dot.y+cosf(q.y)*cosf(q.x)*q_dot.x)*qrp.z +           cosf(q.x)*qrp_dot.y + cosf(q.y)*sinf(q.x)*qrp_dot.z,
+    -cosf(q.x)*q_dot.x*qrp.y + (-cosf(q.x)*sinf(q.y)*q_dot.y-cosf(q.y)*sinf(q.x)*q_dot.x)*qrp.z +          -sinf(q.x)*qrp_dot.y + cosf(q.y)*cosf(q.x)*qrp_dot.z);
 
-  // compute moments
-  // u = J*omega_r_dot - S(J*omega)*omega_r - K(omega - omega_r)
-  float actuatorRoll = Ixx*omega_r_1_dot - (-Izz*omega_z*omega_r_2 + Iyy*omega_y*omega_r_3) - k1*(omega_x - omega_r_1);
-  float actuatorPitch = Iyy*omega_r_2_dot - (Izz*omega_z*omega_r_1 - Ixx*omega_x*omega_r_3) - k2*(omega_y - omega_r_2);
-  float actuatorYaw = Izz*omega_r_3_dot - (-Iyy*omega_y*omega_r_1 + Ixx*omega_x*omega_r_2) - k3*(omega_z - omega_r_3);
+  // compute moments (note there is a type on the paper in equation 71)
+  // u = J omega_r_dot - (J omega) x omega_r - K(omega - omega_r)
+  struct vec u = vsub2(veltmul(J, omega_r_dot), vcross(veltmul(J, omega), omega_r), veltmul(K, vsub(omega, omega_r)));
 
   // On CF2, thrust is mapped 65536 <==> 60 grams
   float linAcc = 0.0; // vertical acceleration m/s^2
-  moment = mkvec(actuatorRoll, actuatorPitch, actuatorYaw);
   if (setpoint->mode.z == modeDisable) {
     linAcc = setpoint->thrust / 65536.0f * 22.2f;
   }
 
   control->controlMode = controlModeForceTorque;
   control->thrustSI = g_vehicleMass * linAcc;
-  control->torque[0] = moment.x;
-  control->torque[1] = moment.y;
-  control->torque[2] = moment.z;
+  control->torque[0] = u.x;
+  control->torque[1] = u.y;
+  control->torque[2] = u.z;
 }
 
 PARAM_GROUP_START(ctrlSJC)
-PARAM_ADD(PARAM_FLOAT, k1, &k1)
-PARAM_ADD(PARAM_FLOAT, k2, &k2)
-PARAM_ADD(PARAM_FLOAT, k3, &k3)
-PARAM_ADD(PARAM_FLOAT, l1, &l1)
-PARAM_ADD(PARAM_FLOAT, l2, &l2)
-PARAM_ADD(PARAM_FLOAT, l3, &l3)
+PARAM_ADD(PARAM_FLOAT, k1, &K.x)
+PARAM_ADD(PARAM_FLOAT, k2, &K.y)
+PARAM_ADD(PARAM_FLOAT, k3, &K.z)
+PARAM_ADD(PARAM_FLOAT, l1, &lambda.x)
+PARAM_ADD(PARAM_FLOAT, l2, &lambda.y)
+PARAM_ADD(PARAM_FLOAT, l3, &lambda.z)
 PARAM_GROUP_STOP(ctrlSJC)
 
 LOG_GROUP_START(ctrlSJC)
