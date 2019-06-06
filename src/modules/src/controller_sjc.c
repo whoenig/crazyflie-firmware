@@ -126,7 +126,7 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
   float eulerRollDesired = radians(setpoint->attitude.roll);
   // This is in the legacy coordinate system where pitch is inverted
   float eulerPitchDesired = -radians(setpoint->attitude.pitch);
-  float eulerYawDesired = desiredYaw;
+  float eulerYawDesired = radians(desiredYaw);
 
   float RollDotDesired = radians(setpoint->attitudeRate.roll);
   float PitchDotDesired = radians(setpoint->attitudeRate.pitch);
@@ -138,7 +138,7 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
   // qr dot
   float qr1_dot = RollDotDesired + l1*(eulerRollDesired - phi);
   float qr2_dot = PitchDotDesired + l2*(eulerPitchDesired - theta);
-  float qr3_dot = YawDotDesired + 0*l3*(eulerYawDesired - psi);
+  float qr3_dot = YawDotDesired + l3*(eulerYawDesired - psi);
 
   // qr double dot
   float qr1_ddot = RollDDotDesired + l1*(RollDotDesired - phi_dot);
