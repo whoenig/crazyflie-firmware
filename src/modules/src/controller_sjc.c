@@ -47,7 +47,7 @@ Notes:
 #include "math3d.h"
 #include "controller_sjc.h"
 
-// #define GRAVITY_MAGNITUDE (9.81f)
+#define GRAVITY_MAGNITUDE (9.81f)
 
 static float g_vehicleMass = 0.032; // TODO: should be CF global for other modules
 
@@ -57,6 +57,20 @@ static struct vec K = {5e-4, 5e-4, 5e-4};
 // Attitude P-gain (diagonal matrix)
 static struct vec lambda = {5, 5, 1};
 
+// Attitude I_gain
+static struct vec Katt_I = {0.0, 0.0, 0.0};
+static float Katt_I_limit = 2;
+static struct vec i_error_att;
+
+// Position gains
+static struct vec Kpos_P = {6.8, 6.8, 13.7};
+static float Kpos_P_limit = 10;
+static struct vec Kpos_D = {2.9, 2.9, 4.9};
+static float Kpos_D_limit = 5;
+static struct vec Kpos_I = {1.0, 1.0, 5.9};
+static float Kpos_I_limit = 2;
+static struct vec i_error_pos;
+
 // Inertia matrix (diagonal matrix), see
 // System Identification of the Crazyflie 2.0 Nano Quadrocopter
 // BA theses, Julian Foerster, ETHZ
@@ -65,9 +79,27 @@ static struct vec J = {16.571710e-6, 16.655602e-6, 29.261652e-6}; // kg m^2
 
 // logging variables
 static struct vec moment;
+static struct vec qr;
+static struct vec q;
+static struct vec omega;
+static struct vec omega_r;
+
+static inline struct vec vclampscl(struct vec value, float min, float max) {
+  return mkvec(
+    clamp(value.x, min, max),
+    clamp(value.y, min, max),
+    clamp(value.z, min, max));
+}
+
+// subtract d, b and c from a.
+static inline struct vec vsub3(struct vec a, struct vec b, struct vec c, struct vec d) {
+  return vadd4(a, vneg(b), vneg(c), vneg(d));
+}
 
 void controllerSJCReset(void)
 {
+  i_error_pos = vzero();
+  i_error_att = vzero();
 }
 
 void controllerSJCInit(void)
@@ -91,29 +123,82 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
 
   float dt = (float)(1.0f/ATTITUDE_RATE);
 
+  // Address inconsistency in firmware where we need to compute our own desired yaw angle
   // Rate-controlled YAW is moving YAW angle setpoint
-  float desiredYaw = 0; //deg
+  float desiredYaw = 0; //rad
   if (setpoint->mode.yaw == modeVelocity) {
-    desiredYaw = state->attitude.yaw + setpoint->attitudeRate.yaw * dt;
+    desiredYaw = radians(state->attitude.yaw + setpoint->attitudeRate.yaw * dt);
   } else if (setpoint->mode.yaw == modeAbs) {
-    desiredYaw = setpoint->attitude.yaw;
+    desiredYaw = radians(setpoint->attitude.yaw);
   } else if (setpoint->mode.quat == modeAbs) {
     struct quat setpoint_quat = mkquat(setpoint->attitudeQuaternion.x, setpoint->attitudeQuaternion.y, setpoint->attitudeQuaternion.z, setpoint->attitudeQuaternion.w);
     struct vec rpy = quat2rpy(setpoint_quat);
-    desiredYaw = degrees(rpy.z);
+    desiredYaw = rpy.z;
+  }
+
+  // qr: Desired/reference angles in rad
+  // struct vec qr;
+
+  // Position controller
+  if (   setpoint->mode.x == modeAbs
+      || setpoint->mode.y == modeAbs
+      || setpoint->mode.z == modeAbs) {
+    struct vec pos_d = mkvec(setpoint->position.x, setpoint->position.y, setpoint->position.z);
+    struct vec vel_d = mkvec(setpoint->velocity.x, setpoint->velocity.y, setpoint->velocity.z);
+    struct vec acc_d = mkvec(setpoint->acceleration.x, setpoint->acceleration.y, setpoint->acceleration.z + GRAVITY_MAGNITUDE);
+    struct vec statePos = mkvec(state->position.x, state->position.y, state->position.z);
+    struct vec stateVel = mkvec(state->velocity.x, state->velocity.y, state->velocity.z);
+
+    // errors
+    struct vec pos_e = vclampscl(vsub(pos_d, statePos), -Kpos_P_limit, Kpos_P_limit);
+    struct vec vel_e = vclampscl(vsub(vel_d, stateVel), -Kpos_D_limit, Kpos_D_limit);
+    i_error_pos = vclampscl(vadd(i_error_pos, vscl(dt, pos_e)), -Kpos_I_limit, Kpos_I_limit);
+
+    struct vec F_d = vscl(g_vehicleMass, vadd4(
+      acc_d,
+      veltmul(Kpos_D, vel_e),
+      veltmul(Kpos_P, pos_e),
+      veltmul(Kpos_I, i_error_pos)));
+
+    control->thrustSI = vmag(F_d);
+
+    qr = mkvec(
+      asinf((F_d.x * sinf(desiredYaw) - F_d.y * cosf(desiredYaw)) / control->thrustSI),
+      atanf((F_d.x * cosf(desiredYaw) + F_d.y * sinf(desiredYaw)) / F_d.z),
+      desiredYaw);
+  } else {
+    // On CF2, thrust is mapped 65536 <==> 60 grams
+    float linAcc = 0.0; // vertical acceleration m/s^2
+    if (setpoint->mode.z == modeDisable) {
+      linAcc = setpoint->thrust / 65536.0f * 22.2f;
+      if (setpoint->thrust < 1000) {
+          control->controlMode = controlModeForceTorque;
+          control->thrustSI = 0;
+          control->torque[0] = 0;
+          control->torque[1] = 0;
+          control->torque[2] = 0;
+          return;
+      }
+    }
+    control->thrustSI = g_vehicleMass * linAcc;
+
+    qr = mkvec(
+      radians(setpoint->attitude.roll),
+      -radians(setpoint->attitude.pitch), // This is in the legacy coordinate system where pitch is inverted
+      radians(desiredYaw));
   }
 
   // Attitude controller
 
   // q: vector of three-dimensional attitude representation
   //    here: Euler angles in rad
-  struct vec q = mkvec(
+  q = mkvec(
     radians(state->attitude.roll),
     radians(-state->attitude.pitch), // This is in the legacy coordinate system where pitch is inverted
     radians(state->attitude.yaw));
 
   // omega: angular velocity in rad/s
-  struct vec omega = mkvec(
+  omega = mkvec(
     radians(sensors->gyro.x),
     radians(sensors->gyro.y),
     radians(sensors->gyro.z));
@@ -128,12 +213,6 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
     omega.x + sinf(q.x)*tanf(q.y)*omega.y + cosf(q.x)*tanf(q.y)*omega.z,
               cosf(q.x)          *omega.y - sinf(q.x)          *omega.z,
               sinf(q.x)/cosf(q.y)*omega.y + cosf(q.x)/cosf(q.y)*omega.z);
-
-  // qr: Desired/reference angles in rad
-  struct vec qr = mkvec(
-    radians(setpoint->attitude.roll),
-    -radians(setpoint->attitude.pitch), // This is in the legacy coordinate system where pitch is inverted
-    radians(desiredYaw));
 
   // qr_dot desired/reference angular velocity in rad/s
   struct vec qr_dot = mkvec(
@@ -151,7 +230,7 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
   // Z(q)^-1 = [0  cos(r)  cos(p)sin(r)]
   //           [0 -sin(r)  cos(p)cos(r)]
   struct vec qrp = vadd(qr_dot, veltmul(lambda, vsub(qr, q)));
-  struct vec omega_r = mkvec(
+  omega_r = mkvec(
     qrp.x +                 -sinf(q.y)           *qrp.z,
             cosf(q.x)*qrp.y + cosf(q.y)*sinf(q.x)*qrp.z,
           - sinf(q.x)*qrp.y + cosf(q.y)*cosf(q.x)*qrp.z);
@@ -171,34 +250,89 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
     -sinf(q.x)*q_dot.x*qrp.y + (-sinf(q.y)*sinf(q.x)*q_dot.y+cosf(q.y)*cosf(q.x)*q_dot.x)*qrp.z +           cosf(q.x)*qrp_dot.y + cosf(q.y)*sinf(q.x)*qrp_dot.z,
     -cosf(q.x)*q_dot.x*qrp.y + (-cosf(q.x)*sinf(q.y)*q_dot.y-cosf(q.y)*sinf(q.x)*q_dot.x)*qrp.z +          -sinf(q.x)*qrp_dot.y + cosf(q.y)*cosf(q.x)*qrp_dot.z);
 
-  // compute moments (note there is a type on the paper in equation 71)
-  // u = J omega_r_dot - (J omega) x omega_r - K(omega - omega_r)
-  struct vec u = vsub2(veltmul(J, omega_r_dot), vcross(veltmul(J, omega), omega_r), veltmul(K, vsub(omega, omega_r)));
+  // Integral part on omega (as in paper)
+  struct vec omega_error = vsub(omega, omega_r);
+  i_error_att = vclampscl(vadd(i_error_att, vscl(dt, omega_error)), -Katt_I_limit, Katt_I_limit);
 
-  // On CF2, thrust is mapped 65536 <==> 60 grams
-  float linAcc = 0.0; // vertical acceleration m/s^2
-  if (setpoint->mode.z == modeDisable) {
-    linAcc = setpoint->thrust / 65536.0f * 22.2f;
-  }
+  // // Integral part on angle
+  // struct vec q_error = vsub(qr, q);
+  // i_error_att = vclampscl(vadd(i_error_att, vscl(dt, q_error)), -Katt_I_limit, Katt_I_limit);
+
+  // compute moments (note there is a typo on the paper in equation 71)
+  // u = J omega_r_dot - (J omega) x omega_r - K(omega - omega_r) - Katt_I \integral(w-w_r, dt)
+  struct vec u = vsub3(
+    veltmul(J, omega_r_dot),
+    vcross(veltmul(J, omega), omega_r),
+    veltmul(K, vsub(omega, omega_r)),
+    veltmul(Katt_I, i_error_att));
 
   control->controlMode = controlModeForceTorque;
-  control->thrustSI = g_vehicleMass * linAcc;
   control->torque[0] = u.x;
   control->torque[1] = u.y;
   control->torque[2] = u.z;
 }
 
 PARAM_GROUP_START(ctrlSJC)
-PARAM_ADD(PARAM_FLOAT, k1, &K.x)
-PARAM_ADD(PARAM_FLOAT, k2, &K.y)
-PARAM_ADD(PARAM_FLOAT, k3, &K.z)
-PARAM_ADD(PARAM_FLOAT, l1, &lambda.x)
-PARAM_ADD(PARAM_FLOAT, l2, &lambda.y)
-PARAM_ADD(PARAM_FLOAT, l3, &lambda.z)
+// Attitude P
+PARAM_ADD(PARAM_FLOAT, Katt_Px, &lambda.x)
+PARAM_ADD(PARAM_FLOAT, Katt_Py, &lambda.y)
+PARAM_ADD(PARAM_FLOAT, Katt_Pz, &lambda.z)
+// Attitude D
+PARAM_ADD(PARAM_FLOAT, Katt_Dx, &K.x)
+PARAM_ADD(PARAM_FLOAT, Katt_Dy, &K.y)
+PARAM_ADD(PARAM_FLOAT, Katt_Dz, &K.z)
+// Attitude I
+PARAM_ADD(PARAM_FLOAT, Katt_Ix, &Katt_I.x)
+PARAM_ADD(PARAM_FLOAT, Katt_Iy, &Katt_I.y)
+PARAM_ADD(PARAM_FLOAT, Katt_Iz, &Katt_I.z)
+PARAM_ADD(PARAM_FLOAT, Katt_I_limit, &Katt_I_limit)
+// Position P
+PARAM_ADD(PARAM_FLOAT, Kpos_Px, &Kpos_P.x)
+PARAM_ADD(PARAM_FLOAT, Kpos_Py, &Kpos_P.y)
+PARAM_ADD(PARAM_FLOAT, Kpos_Pz, &Kpos_P.z)
+PARAM_ADD(PARAM_FLOAT, Kpos_P_limit, &Kpos_P_limit)
+// Position D
+PARAM_ADD(PARAM_FLOAT, Kpos_Dx, &Kpos_D.x)
+PARAM_ADD(PARAM_FLOAT, Kpos_Dy, &Kpos_D.y)
+PARAM_ADD(PARAM_FLOAT, Kpos_Dz, &Kpos_D.z)
+PARAM_ADD(PARAM_FLOAT, Kpos_D_limit, &Kpos_D_limit)
+// Position I
+PARAM_ADD(PARAM_FLOAT, Kpos_Ix, &Kpos_I.x)
+PARAM_ADD(PARAM_FLOAT, Kpos_Iy, &Kpos_I.y)
+PARAM_ADD(PARAM_FLOAT, Kpos_Iz, &Kpos_I.z)
+PARAM_ADD(PARAM_FLOAT, Kpos_I_limit, &Kpos_I_limit)
 PARAM_GROUP_STOP(ctrlSJC)
 
 LOG_GROUP_START(ctrlSJC)
 LOG_ADD(LOG_FLOAT, momentRoll, &moment.x)
 LOG_ADD(LOG_FLOAT, momentPitch, &moment.y)
 LOG_ADD(LOG_FLOAT, momentYaw, &moment.z)
+// current angles
+LOG_ADD(LOG_FLOAT, qx, &q.x)
+LOG_ADD(LOG_FLOAT, qy, &q.y)
+LOG_ADD(LOG_FLOAT, qz, &q.z)
+// desired angles
+LOG_ADD(LOG_FLOAT, qrx, &qr.x)
+LOG_ADD(LOG_FLOAT, qry, &qr.y)
+LOG_ADD(LOG_FLOAT, qrz, &qr.z)
+
+// errors
+LOG_ADD(LOG_FLOAT, i_error_attx, &i_error_att.x)
+LOG_ADD(LOG_FLOAT, i_error_atty, &i_error_att.y)
+LOG_ADD(LOG_FLOAT, i_error_attz, &i_error_att.z)
+
+LOG_ADD(LOG_FLOAT, i_error_posx, &i_error_pos.x)
+LOG_ADD(LOG_FLOAT, i_error_posy, &i_error_pos.y)
+LOG_ADD(LOG_FLOAT, i_error_posz, &i_error_pos.z)
+
+// omega
+LOG_ADD(LOG_FLOAT, omegax, &omega.x)
+LOG_ADD(LOG_FLOAT, omegay, &omega.y)
+LOG_ADD(LOG_FLOAT, omegaz, &omega.z)
+
+// omega_r
+LOG_ADD(LOG_FLOAT, omegarx, &omega_r.x)
+LOG_ADD(LOG_FLOAT, omegary, &omega_r.y)
+LOG_ADD(LOG_FLOAT, omegarz, &omega_r.z)
+
 LOG_GROUP_STOP(ctrlSJC)
