@@ -471,6 +471,13 @@ void mpu6500SetFullScaleGyroRange(uint8_t range)
       MPU6500_GCONFIG_FS_SEL_LENGTH, range);
 }
 
+// see page 14 in RM-MPU-9250A-00-v1.6.pdf
+void mpu9250SetFchoiceInverted(uint8_t value)
+{
+  i2cdevWriteBits(I2Cx, devAddr, MPU6500_RA_GYRO_CONFIG, 0,
+      2, value);
+}
+
 void mpu6500SetGyroXSelfTest(bool enabled)
 {
   i2cdevWriteBit(I2Cx, devAddr, MPU6500_RA_GYRO_CONFIG, MPU6500_GCONFIG_XG_ST_BIT, enabled);

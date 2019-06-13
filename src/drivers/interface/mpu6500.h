@@ -464,6 +464,7 @@ void mpu6500SetGyroZSelfTest(bool enabled);
 uint8_t mpu6500GetFullScaleGyroRangeId();
 float mpu6500GetFullScaleGyroDPL();
 void mpu6500SetFullScaleGyroRange(uint8_t range);
+void mpu9250SetFchoiceInverted(uint8_t value);
 
 // ACCEL_CONFIG register
 bool mpu6500GetAccelXSelfTest();
