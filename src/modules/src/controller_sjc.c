@@ -51,23 +51,25 @@ Notes:
 
 static float g_vehicleMass = 0.032; // TODO: should be CF global for other modules
 
-// Attitude D-gain (diagonal matrix)
-static struct vec K = {5e-4, 5e-4, 5e-4};
+// Attitude P on omega
+static struct vec K = {25e-4, 25e-4, 25e-4};//{5e-4, 5e-4, 5e-4};
+// static float K_limit = 8.7; // ~500 deg/s
 
-// Attitude P-gain (diagonal matrix)
-static struct vec lambda = {5, 5, 1};
+// Attitude P on angle
+static struct vec lambda = {8, 8, 20};//{5, 5, 1};
+// static float lambda_limit = M_PI / 2.0; // 90 deg
 
-// Attitude I_gain
-static struct vec Katt_I = {0.0, 0.0, 0.0};
-static float Katt_I_limit = 2;
+// Attitude I on omega
+static struct vec Katt_I = {11e-4, 11e-4, 40e-4};
+static float Katt_I_limit = 0.6;
 static struct vec i_error_att;
 
 // Position gains
-static struct vec Kpos_P = {6.8, 6.8, 13.7};
-static float Kpos_P_limit = 10;
-static struct vec Kpos_D = {2.9, 2.9, 4.9};
-static float Kpos_D_limit = 5;
-static struct vec Kpos_I = {1.0, 1.0, 5.9};
+static struct vec Kpos_P = {20, 20, 13.7};
+static float Kpos_P_limit = 0.5;
+static struct vec Kpos_D = {10, 10, 4.9};
+static float Kpos_D_limit = 0.5;
+static struct vec Kpos_I = {0.0, 0.0, 5.9};
 static float Kpos_I_limit = 2;
 static struct vec i_error_pos;
 
@@ -78,11 +80,15 @@ static struct vec i_error_pos;
 static struct vec J = {16.571710e-6, 16.655602e-6, 29.261652e-6}; // kg m^2
 
 // logging variables
-static struct vec moment;
+static struct vec u;
 static struct vec qr;
 static struct vec q;
 static struct vec omega;
 static struct vec omega_r;
+
+static struct vec qrp;
+static struct vec qr_dot;
+
 
 static inline struct vec vclampscl(struct vec value, float min, float max) {
   return mkvec(
@@ -161,6 +167,10 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
       veltmul(Kpos_I, i_error_pos)));
 
     control->thrustSI = vmag(F_d);
+    // Reset the accumulated error while on the ground
+    if (control->thrustSI < 0.01f) {
+      controllerSJCReset();
+    }
 
     qr = mkvec(
       asinf((F_d.x * sinf(desiredYaw) - F_d.y * cosf(desiredYaw)) / control->thrustSI),
@@ -177,6 +187,7 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
           control->torque[0] = 0;
           control->torque[1] = 0;
           control->torque[2] = 0;
+          controllerSJCReset();
           return;
       }
     }
@@ -215,7 +226,7 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
               sinf(q.x)/cosf(q.y)*omega.y + cosf(q.x)/cosf(q.y)*omega.z);
 
   // qr_dot desired/reference angular velocity in rad/s
-  struct vec qr_dot = mkvec(
+  qr_dot = mkvec(
     radians(setpoint->attitudeRate.roll),
     radians(setpoint->attitudeRate.pitch),
     radians(setpoint->attitudeRate.yaw));
@@ -229,7 +240,7 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
   //           [1  0       -sin(p)     ]
   // Z(q)^-1 = [0  cos(r)  cos(p)sin(r)]
   //           [0 -sin(r)  cos(p)cos(r)]
-  struct vec qrp = vadd(qr_dot, veltmul(lambda, vsub(qr, q)));
+  qrp = vadd(qr_dot, veltmul(lambda, vsub(qr, q)));
   omega_r = mkvec(
     qrp.x +                 -sinf(q.y)           *qrp.z,
             cosf(q.x)*qrp.y + cosf(q.y)*sinf(q.x)*qrp.z,
@@ -260,7 +271,7 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
 
   // compute moments (note there is a typo on the paper in equation 71)
   // u = J omega_r_dot - (J omega) x omega_r - K(omega - omega_r) - Katt_I \integral(w-w_r, dt)
-  struct vec u = vsub3(
+  u = vsub3(
     veltmul(J, omega_r_dot),
     vcross(veltmul(J, omega), omega_r),
     veltmul(K, vsub(omega, omega_r)),
@@ -304,9 +315,9 @@ PARAM_ADD(PARAM_FLOAT, Kpos_I_limit, &Kpos_I_limit)
 PARAM_GROUP_STOP(ctrlSJC)
 
 LOG_GROUP_START(ctrlSJC)
-LOG_ADD(LOG_FLOAT, momentRoll, &moment.x)
-LOG_ADD(LOG_FLOAT, momentPitch, &moment.y)
-LOG_ADD(LOG_FLOAT, momentYaw, &moment.z)
+LOG_ADD(LOG_FLOAT, torquex, &u.x)
+LOG_ADD(LOG_FLOAT, torquey, &u.y)
+LOG_ADD(LOG_FLOAT, torquez, &u.z)
 // current angles
 LOG_ADD(LOG_FLOAT, qx, &q.x)
 LOG_ADD(LOG_FLOAT, qy, &q.y)
@@ -334,5 +345,11 @@ LOG_ADD(LOG_FLOAT, omegaz, &omega.z)
 LOG_ADD(LOG_FLOAT, omegarx, &omega_r.x)
 LOG_ADD(LOG_FLOAT, omegary, &omega_r.y)
 LOG_ADD(LOG_FLOAT, omegarz, &omega_r.z)
+
+LOG_ADD(LOG_FLOAT, qrpx, &qrp.x)
+LOG_ADD(LOG_FLOAT, qrpz, &qrp.z)
+
+LOG_ADD(LOG_FLOAT, qrdotz, &qr_dot.z)
+
 
 LOG_GROUP_STOP(ctrlSJC)
