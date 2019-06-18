@@ -23,15 +23,25 @@
  *
  * power_distribution_stock.c - Crazyflie stock power distribution code
  */
+
 #include "power_distribution.h"
 
 #include "log.h"
 #include "param.h"
 #include "num.h"
+#include "math3d.h"
 
 #include "motors.h"
 
 static bool motorSetEnable = false;
+static uint8_t saturationStatus = 0;
+
+enum saturationBits
+{
+  SaturationOffsetThrust = 1,
+  SaturationRollPitch    = 2,
+  SaturationYaw          = 4,
+};
 
 static struct {
   uint32_t m1;
@@ -114,11 +124,78 @@ static void powerDistributionForceTorque(const control_t *control)
 
   // Thrust for each motor in N
   float motorForce[4];
+  saturationStatus = 0;
+
+  // Simple thrust mixing
+#if 0
   motorForce[0] = thrustpart - rollpart - pitchpart + yawpart;
   motorForce[1] = thrustpart - rollpart + pitchpart - yawpart;
   motorForce[2] = thrustpart + rollpart + pitchpart + yawpart;
   motorForce[3] = thrustpart + rollpart - pitchpart - yawpart;
+#else
+  // Thrust mixing similar to PX4 (see https://px4.github.io/Firmware-Doxygen/d7/d2a/mixer__multirotor_8cpp_source.html)
+  // 1. Mix thrust, roll, pitch without yaw
+  motorForce[0] = thrustpart - rollpart - pitchpart;
+  motorForce[1] = thrustpart - rollpart + pitchpart;
+  motorForce[2] = thrustpart + rollpart + pitchpart;
+  motorForce[3] = thrustpart + rollpart - pitchpart;
 
+  float minForce = motorForce[0];
+  float maxForce = motorForce[0];
+  for (int i = 1; i < 4; ++i) {
+    minForce = fminf(minForce, motorForce[i]);
+    maxForce = fmaxf(maxForce, motorForce[i]);
+  }
+
+  float deltaForce = maxForce - minForce;
+  float thrustOffset = 0;
+  float rollPitchScale = 1.0f;
+
+  // 2. Check if we can shift thrust to avoid saturation
+  if (deltaForce <= max_thrust) {
+    if (minForce < 0) {
+      thrustOffset = -minForce;
+    } else if (maxForce > max_thrust) {
+      thrustOffset = -(maxForce - max_thrust);
+    }
+  } else {
+    // shifting thrust is not sufficient => scale roll and pitch as well
+    rollPitchScale = max_thrust / deltaForce;
+    thrustOffset = max_thrust - ((maxForce - thrustpart) * rollPitchScale + thrustpart);
+  }
+
+  // 3. Mix thrust (with offset), roll/pitch (with scale) to identify margin for yaw
+  motorForce[0] = thrustpart+thrustOffset - rollpart*rollPitchScale - pitchpart*rollPitchScale;
+  motorForce[1] = thrustpart+thrustOffset - rollpart*rollPitchScale + pitchpart*rollPitchScale;
+  motorForce[2] = thrustpart+thrustOffset + rollpart*rollPitchScale + pitchpart*rollPitchScale;
+  motorForce[3] = thrustpart+thrustOffset + rollpart*rollPitchScale - pitchpart*rollPitchScale;
+
+  float maxYawPart = max_thrust - motorForce[0]; // positive yaw can be at most
+  float minYawPart = 0 - motorForce[0]; // negative yaw can be at most
+  maxYawPart = fmaxf(maxYawPart, motorForce[1]);
+  maxYawPart = fmaxf(maxYawPart, max_thrust - motorForce[2]);
+  maxYawPart = fmaxf(maxYawPart, motorForce[3]);
+  minYawPart = fminf(minYawPart, motorForce[1] - max_thrust);
+  minYawPart = fminf(minYawPart, 0 - motorForce[2]);
+  minYawPart = fminf(minYawPart, motorForce[3] - max_thrust);
+
+  float clamped_yawpart = clamp(yawpart, minYawPart, maxYawPart);
+  if (thrustOffset != 0) {
+    saturationStatus |= SaturationOffsetThrust;
+  }
+  if (rollPitchScale != 1.0f) {
+    saturationStatus |= SaturationRollPitch;
+  }
+  if (yawpart != clamped_yawpart) {
+    saturationStatus |= SaturationYaw;
+  }
+
+  // 4. Final thrust mixing (unlike PX4, we do not allow to reduce thrust to get yaw response)
+  motorForce[0] = thrustpart+thrustOffset - rollpart*rollPitchScale - pitchpart*rollPitchScale + clamped_yawpart;
+  motorForce[1] = thrustpart+thrustOffset - rollpart*rollPitchScale + pitchpart*rollPitchScale - clamped_yawpart;
+  motorForce[2] = thrustpart+thrustOffset + rollpart*rollPitchScale + pitchpart*rollPitchScale + clamped_yawpart;
+  motorForce[3] = thrustpart+thrustOffset + rollpart*rollPitchScale - pitchpart*rollPitchScale - clamped_yawpart;
+#endif
   // for CF2, motorratio directly maps to thrust (not rpm etc.)
   // Thus, we only need to scale the values here
   motorPower.m1 = limitThrust(motorForce[0] / max_thrust * 65536);
@@ -167,4 +244,5 @@ LOG_ADD(LOG_INT32, m4, &motorPower.m4)
 LOG_ADD(LOG_INT32, m1, &motorPower.m1)
 LOG_ADD(LOG_INT32, m2, &motorPower.m2)
 LOG_ADD(LOG_INT32, m3, &motorPower.m3)
+LOG_ADD(LOG_UINT8, saturation, &saturationStatus)
 LOG_GROUP_STOP(motor)
