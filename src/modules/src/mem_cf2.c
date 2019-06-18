@@ -45,6 +45,7 @@
 #include "locodeck.h"
 #include "crtp_commander_high_level.h"
 #include "lighthouse.h"
+#include "usddeck.h"
 
 #include "console.h"
 #include "assert.h"
@@ -70,7 +71,8 @@
 #define TRAJ_ID         0x03
 #define LOCO2_ID        0x04
 #define LH_ID           0x05
-#define OW_FIRST_ID     0x06
+#define USD_ID          0x06
+#define OW_FIRST_ID     0x07
 
 #define STATUS_OK 0
 
@@ -81,6 +83,7 @@
 #define MEM_TYPE_TRAJ   0x12
 #define MEM_TYPE_LOCO2  0x13
 #define MEM_TYPE_LH     0x14
+#define MEM_TYPE_USD    0x15
 
 #define MEM_LOCO_INFO             0x0000
 #define MEM_LOCO_ANCHOR_BASE      0x1000
@@ -218,6 +221,9 @@ void createInfoResponse(CRTPPacket* p, uint8_t memId)
     case LH_ID:
       createInfoResponseBody(p, MEM_TYPE_LH, sizeof(lighthouseBaseStationsGeometry), noData);
       break;
+    case USD_ID:
+      createInfoResponseBody(p, MEM_TYPE_USD, usddeckFileSize(), noData);
+      break;
     default:
       if (owGetinfo(memId - OW_FIRST_ID, &serialNbr))
       {
@@ -299,6 +305,17 @@ void memReadProcess()
         if (memAddr + readLen <= sizeof(lighthouseBaseStationsGeometry)) {
           uint8_t* start = (uint8_t*)lighthouseBaseStationsGeometry;
           memcpy(&p.data[6], start + memAddr, readLen);
+          status = STATUS_OK;
+        } else {
+          status = EIO;
+        }
+      }
+      break;
+
+    case USD_ID:
+      {
+        if (memAddr + readLen <= usddeckFileSize() &&
+            usddeckRead(memAddr, &p.data[6], readLen)) {
           status = STATUS_OK;
         } else {
           status = EIO;
@@ -521,6 +538,8 @@ void memWriteProcess()
       }
       break;
 
+    case USD_ID:
+        // Fall through
     case LOCO_ID:
         // Fall through
     case LOCO2_ID:
