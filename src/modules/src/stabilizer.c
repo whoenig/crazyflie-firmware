@@ -49,6 +49,7 @@
 #include "estimator.h"
 #include "usddeck.h"
 #include "quatcompress.h"
+#include "math3d.h"
 
 static bool isInit;
 static bool emergencyStop = false;
@@ -109,6 +110,12 @@ static struct {
   int16_t ax;
   int16_t ay;
   int16_t az;
+  // compressed quaternion, see quatcompress.h
+  int32_t quat;
+  // angular velocity - milliradians / sec
+  int16_t rateRoll;
+  int16_t ratePitch;
+  int16_t rateYaw;
 } setpointCompressed;
 
 static void stabilizerTask(void* param);
@@ -130,9 +137,9 @@ static void compressState()
   stateCompressed.vy = state.velocity.y * 1000.0f;
   stateCompressed.vz = state.velocity.z * 1000.0f;
 
-  stateCompressed.ax = state.acc.x * 1000.0f;
-  stateCompressed.ay = state.acc.y * 1000.0f;
-  stateCompressed.az = state.acc.z * 1000.0f;
+  stateCompressed.ax = state.acc.x * 9.81f * 1000.0f;
+  stateCompressed.ay = state.acc.y * 9.81f * 1000.0f;
+  stateCompressed.az = (state.acc.z + 1) * 9.81f * 1000.0f;
 
   float const q[4] = {
     state.attitudeQuaternion.x,
@@ -143,7 +150,7 @@ static void compressState()
 
   float const deg2millirad = ((float)M_PI * 1000.0f) / 180.0f;
   stateCompressed.rateRoll = sensorData.gyro.x * deg2millirad;
-  stateCompressed.ratePitch = -sensorData.gyro.y * deg2millirad;
+  stateCompressed.ratePitch = sensorData.gyro.y * deg2millirad;
   stateCompressed.rateYaw = sensorData.gyro.z * deg2millirad;
 }
 
@@ -160,6 +167,24 @@ static void compressSetpoint()
   setpointCompressed.ax = setpoint.acceleration.x * 1000.0f;
   setpointCompressed.ay = setpoint.acceleration.y * 1000.0f;
   setpointCompressed.az = setpoint.acceleration.z * 1000.0f;
+
+  struct vec rpy = mkvec(
+    radians(setpoint.attitude.roll),
+    -radians(setpoint.attitude.pitch),
+    radians(setpoint.attitude.yaw));
+  struct quat q= rpy2quat(rpy);
+
+  // float const q[4] = {
+  //   setpoint.attitudeQuaternion.x,
+  //   setpoint.attitudeQuaternion.y,
+  //   setpoint.attitudeQuaternion.z,
+  //   setpoint.attitudeQuaternion.w};
+  setpointCompressed.quat = quatcompress((const float*)&q);
+
+  float const deg2millirad = ((float)M_PI * 1000.0f) / 180.0f;
+  setpointCompressed.rateRoll = setpoint.attitudeRate.roll * deg2millirad;
+  setpointCompressed.ratePitch = setpoint.attitudeRate.pitch * deg2millirad;
+  setpointCompressed.rateYaw = setpoint.attitudeRate.yaw * deg2millirad;
 }
 
 void stabilizerInit(StateEstimatorType estimator)
@@ -271,7 +296,8 @@ static void stabilizerTask(void* param)
 
       checkEmergencyStopTimeout();
 
-      if (emergencyStop) {
+      bool upsideDown = sensorData.acc.z < -0.5f;
+      if (emergencyStop || upsideDown) {
         powerStop();
       } else {
         powerDistribution(&control);
@@ -550,6 +576,12 @@ LOG_ADD(LOG_INT16, vz, &setpointCompressed.vz)
 LOG_ADD(LOG_INT16, ax, &setpointCompressed.ax) // acceleration - mm / sec^2
 LOG_ADD(LOG_INT16, ay, &setpointCompressed.ay)
 LOG_ADD(LOG_INT16, az, &setpointCompressed.az)
+
+LOG_ADD(LOG_UINT32, quat, &setpointCompressed.quat) // compressed quaternion, see quatcompress.h
+
+LOG_ADD(LOG_INT16, rateRoll, &setpointCompressed.rateRoll)   // angular velocity - milliradians / sec
+LOG_ADD(LOG_INT16, ratePitch, &setpointCompressed.ratePitch)
+LOG_ADD(LOG_INT16, rateYaw, &setpointCompressed.rateYaw)
 LOG_GROUP_STOP(ctrltargetZ)
 
 LOG_GROUP_START(stabilizer)
