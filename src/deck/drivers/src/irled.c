@@ -44,13 +44,19 @@
 #include "config.h"
 #include "nvicconf.h"
 
-// #define USE_DIGITAL
-#define USE_PWM
+#define USE_DIGITAL
+// #define USE_PWM
 
 static bool isInit;
 
-#ifdef USE_DIGITAL
+#ifdef USE_PWM
+static uint8_t ratio = 237;
+static void irLedSetRatio(uint8_t ratio);
+#endif
+
 static xTimerHandle timer;
+
+#ifdef USE_DIGITAL
 static uint8_t my_id;
 static bool parity;
 
@@ -175,8 +181,6 @@ static void irLedTimer(xTimerHandle timer)
 /* This should be calculated.. */
 #define SERVO_BASE_FREQ (329500)
 
-static uint8_t ratio = 237;
-
 static void irLedSetRatio(uint8_t ratio)
 {
   TIM_SetCompare3(SERVO_TIM, ratio);
@@ -291,6 +295,6 @@ DECK_DRIVER(irled_deck);
 
 #ifdef USE_PWM
 PARAM_GROUP_START(irled)
-PARAM_ADD(PARAM_UINT32, baudrate, &baudrate)
+PARAM_ADD(PARAM_UINT8, ratio, &ratio)
 PARAM_GROUP_STOP(irled)
 #endif
