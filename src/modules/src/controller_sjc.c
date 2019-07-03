@@ -31,13 +31,17 @@ IJRR 2016
 
 Notes:
   * There is a typo in the paper, in eq 71: It should be -K (omega - omega_r) (i.e., no dot)
+  * We make the following changes:
+    1. The first term of the control law (J omega_r_dot) is treated as a damping term on omega_r
+       to capture higher-order effects such as motor delays. Thus, we allow to tune this J (the J
+       in the second part is the real inertia matrix)
+    2. We use the current yaw angle instead of the desired yaw angle to compute desired roll/pitch angles
   * This implementation is inspired by the implementation of the controller by 
     Giri P Subramanian for CF 1.0
-
   * Runtime attitude controller: 6us
+  * Note that a quaternion-based version is too complex for on-board execution if an analytical model
+    of Z^-1 and Z_dot^-1 is to be used
 
-  * BIG TODO2: switch to quaternion-based control
-  * BIG TODO3: position controller
 */
 
 #include <math.h>
@@ -52,24 +56,24 @@ Notes:
 static float g_vehicleMass = 0.032; // TODO: should be CF global for other modules
 
 // Attitude P on omega
-static struct vec K = {25e-4, 25e-4, 25e-4};//{5e-4, 5e-4, 5e-4};
+static struct vec K = {0.0005, 0.0005, 0.001};
 // static float K_limit = 8.7; // ~500 deg/s
 
 // Attitude P on angle
-static struct vec lambda = {8, 8, 20};//{5, 5, 1};
+static struct vec lambda = {10, 10, 10};
 // static float lambda_limit = M_PI / 2.0; // 90 deg
 
 // Attitude I on omega
-static struct vec Katt_I = {11e-4, 11e-4, 40e-4};
-static float Katt_I_limit = 0.6;
+static struct vec Katt_I = {0.00025, 0.00025, 0.0005};
+static float Katt_I_limit = 2;
 static struct vec i_error_att;
 
 // Position gains
-static struct vec Kpos_P = {20, 20, 13.7};
-static float Kpos_P_limit = 0.5;
-static struct vec Kpos_D = {10, 10, 4.9};
-static float Kpos_D_limit = 0.5;
-static struct vec Kpos_I = {0.0, 0.0, 5.9};
+static struct vec Kpos_P = {12, 12, 12};
+static float Kpos_P_limit = 100;
+static struct vec Kpos_D = {8, 8, 8};
+static float Kpos_D_limit = 100;
+static struct vec Kpos_I = {8, 8, 8};
 static float Kpos_I_limit = 2;
 static struct vec i_error_pos;
 
@@ -78,6 +82,10 @@ static struct vec i_error_pos;
 // BA theses, Julian Foerster, ETHZ
 // https://polybox.ethz.ch/index.php/s/20dde63ee00ffe7085964393a55a91c7
 static struct vec J = {16.571710e-6, 16.655602e-6, 29.261652e-6}; // kg m^2
+
+// We treat the first part of the control law (J omega_r_dot) as damping on omega_r
+// by allowing to change J
+static struct vec Jtune = {48e-6, 48e-6, 29e-6};
 
 // logging variables
 static struct vec u;
@@ -172,9 +180,11 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
       controllerSJCReset();
     }
 
+    // Use current yaw instead of desired yaw for roll/pitch
+    float yaw = radians(state->attitude.yaw);
     qr = mkvec(
-      asinf((F_d.x * sinf(desiredYaw) - F_d.y * cosf(desiredYaw)) / control->thrustSI),
-      atanf((F_d.x * cosf(desiredYaw) + F_d.y * sinf(desiredYaw)) / F_d.z),
+      asinf((F_d.x * sinf(yaw) - F_d.y * cosf(yaw)) / control->thrustSI),
+      atanf((F_d.x * cosf(yaw) + F_d.y * sinf(yaw)) / F_d.z),
       desiredYaw);
   } else {
     // On CF2, thrust is mapped 65536 <==> 60 grams
@@ -272,7 +282,7 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
   // compute moments (note there is a typo on the paper in equation 71)
   // u = J omega_r_dot - (J omega) x omega_r - K(omega - omega_r) - Katt_I \integral(w-w_r, dt)
   u = vsub3(
-    veltmul(J, omega_r_dot),
+    veltmul(Jtune, omega_r_dot),
     vcross(veltmul(J, omega), omega_r),
     veltmul(K, vsub(omega, omega_r)),
     veltmul(Katt_I, i_error_att));
@@ -312,6 +322,11 @@ PARAM_ADD(PARAM_FLOAT, Kpos_Ix, &Kpos_I.x)
 PARAM_ADD(PARAM_FLOAT, Kpos_Iy, &Kpos_I.y)
 PARAM_ADD(PARAM_FLOAT, Kpos_Iz, &Kpos_I.z)
 PARAM_ADD(PARAM_FLOAT, Kpos_I_limit, &Kpos_I_limit)
+
+// Jtune
+PARAM_ADD(PARAM_FLOAT, Jtune_x, &Jtune.x)
+PARAM_ADD(PARAM_FLOAT, Jtune_y, &Jtune.y)
+PARAM_ADD(PARAM_FLOAT, Jtune_z, &Jtune.z)
 PARAM_GROUP_STOP(ctrlSJC)
 
 LOG_GROUP_START(ctrlSJC)
