@@ -39,6 +39,15 @@
 
 //Logging includes
 #include "log.h"
+#include "param.h"
+
+// Data for CF20
+static float d00 = 0.1464;
+static float d10 = 0.1991;
+static float d01 = -0.1288;
+static float d20 = -0.004736;
+static float d11 = -0.09409;
+static float maxThrust = 12.0;//g
 
 static uint16_t motorsBLConvBitsTo16(uint16_t bits);
 static uint16_t motorsBLConv16ToBits(uint16_t bits);
@@ -197,7 +206,7 @@ bool motorsTest(void)
   return isInit;
 }
 
-// Ithrust is thrust mapped for 65536 <==> 60 grams
+// Ithrust is thrust mapped for 65536 <==> 15 grams (per rotor)
 void motorsSetRatio(uint32_t id, uint16_t ithrust)
 {
   if (isInit) {
@@ -210,14 +219,25 @@ void motorsSetRatio(uint32_t id, uint16_t ithrust)
   #ifdef ENABLE_THRUST_BAT_COMPENSATED
     if (motorMap[id]->drvType == BRUSHED)
     {
-      float thrust = ((float)ithrust / 65536.0f) * 60;
-      float volts = -0.0006239f * thrust * thrust + 0.088f * thrust;
-      float supply_voltage = pmGetBatteryVoltage();
-      float percentage = volts / supply_voltage;
-      percentage = percentage > 1.0f ? 1.0f : percentage;
-      ratio = percentage * UINT16_MAX;
-      motor_ratios[id] = ratio;
+      // float thrust = ((float)ithrust / 65536.0f) * 60;
+      // float volts = -0.0006239f * thrust * thrust + 0.088f * thrust;
+      // float supply_voltage = pmGetBatteryVoltage();
+      // float percentage = volts / supply_voltage;
+      // percentage = percentage > 1.0f ? 1.0f : percentage;
+      // ratio = percentage * UINT16_MAX;
+      // motor_ratios[id] = ratio;
 
+      // desired thrust in grams
+      float maxNewton = maxThrust / 1000.0f * 9.81f;
+      float thrustNewton = ((float)ithrust / 65536.0f) * maxNewton;
+      float thrustGram = thrustNewton / 9.81f * 1000.0f;
+      // normalized voltage
+      float v = pmGetBatteryVoltage() / 4.2f;
+      // normalized pwm:
+      float pwm = d00 + d10 * thrustGram + d01 * v + d20 * thrustGram * thrustGram + d11 * thrustGram * v;
+
+      ratio = pwm * UINT16_MAX;
+      motor_ratios[id] = ratio;
     }
   #endif
     if (motorMap[id]->drvType == BRUSHLESS)
@@ -307,3 +327,12 @@ LOG_ADD(LOG_UINT32, m2_pwm, &motor_ratios[1])
 LOG_ADD(LOG_UINT32, m3_pwm, &motor_ratios[2])
 LOG_ADD(LOG_UINT32, m4_pwm, &motor_ratios[3])
 LOG_GROUP_STOP(pwm)
+
+PARAM_GROUP_START(pwm)
+PARAM_ADD(PARAM_FLOAT, d00, &d00)
+PARAM_ADD(PARAM_FLOAT, d10, &d10)
+PARAM_ADD(PARAM_FLOAT, d01, &d01)
+PARAM_ADD(PARAM_FLOAT, d20, &d20)
+PARAM_ADD(PARAM_FLOAT, d11, &d11)
+PARAM_ADD(PARAM_FLOAT, maxThrust, &maxThrust)
+PARAM_GROUP_STOP(pwm)

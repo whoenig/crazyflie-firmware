@@ -114,7 +114,7 @@ static void powerDistributionForceTorque(const control_t *control)
   // see https://github.com/jpreiss/libquadrotor/blob/master/src/quad_control.c
   const float thrust_to_torque = 0.006f;
   const float arm_length = 0.046f; // m
-  const float max_thrust = 0.15f; // N
+  const float max_thrust = 12.0 / 1000.0 * 9.81; // N
   const float thrustpart = 0.25f * control->thrustSI; // N (per rotor)
   const float yawpart = -0.25f * control->torque[2] / thrust_to_torque;
 
@@ -127,7 +127,7 @@ static void powerDistributionForceTorque(const control_t *control)
   saturationStatus = 0;
 
   // Simple thrust mixing
-#if 0
+#if 1
   motorForce[0] = thrustpart - rollpart - pitchpart + yawpart;
   motorForce[1] = thrustpart - rollpart + pitchpart - yawpart;
   motorForce[2] = thrustpart + rollpart + pitchpart + yawpart;
