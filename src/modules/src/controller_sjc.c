@@ -50,6 +50,7 @@ Notes:
 #include "log.h"
 #include "math3d.h"
 #include "controller_sjc.h"
+// #include "debug.h"
 
 #define GRAVITY_MAGNITUDE (9.81f)
 
@@ -187,10 +188,7 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
       atanf((F_d.x * cosf(yaw) + F_d.y * sinf(yaw)) / F_d.z),
       desiredYaw);
   } else {
-    // On CF2, thrust is mapped 65536 <==> 60 grams
-    float linAcc = 0.0; // vertical acceleration m/s^2
     if (setpoint->mode.z == modeDisable) {
-      linAcc = setpoint->thrust / 65536.0f * 22.2f;
       if (setpoint->thrust < 1000) {
           control->controlMode = controlModeForceTorque;
           control->thrustSI = 0;
@@ -201,7 +199,9 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
           return;
       }
     }
-    control->thrustSI = g_vehicleMass * linAcc;
+    // On CF2, thrust is mapped 65536 <==> 4 * 12 grams
+    const float max_thrust = 4 * 12.0 / 1000.0 * 9.81; // N
+    control->thrustSI = setpoint->thrust / 65536.0f * max_thrust;
 
     qr = mkvec(
       radians(setpoint->attitude.roll),
@@ -210,6 +210,7 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
   }
 
   // Attitude controller
+  // DEBUG_PRINT("q %d %d %d %d\n", (int)(qr.x * 1000), (int)(qr.y * 1000), (int)(qr.z * 1000), (int)(control->thrustSI * 1000));
 
   // q: vector of three-dimensional attitude representation
   //    here: Euler angles in rad
