@@ -54,7 +54,7 @@ Notes:
 
 #define GRAVITY_MAGNITUDE (9.81f)
 
-static float g_vehicleMass = 0.032; // TODO: should be CF global for other modules
+static float g_vehicleMass = 0.033; // TODO: should be CF global for other modules
 
 // Attitude P on omega
 static struct vec K = {0.0005, 0.0005, 0.001};
