@@ -238,7 +238,7 @@ TCHAR* f_gets_without_comments (
     if (c == '\n') {
       break;   /* Break on EOL */
     }
-    if (isspace(c)) {
+    if (isspace((int)c)) {
       continue; /* Strip whitespace */
     }
     if (c == '#') {
@@ -342,7 +342,7 @@ static void usdInit(DeckInfo *info)
         initSuccess = true;
         break;
       }
-      
+
       if (!initSuccess) {
           DEBUG_PRINT("Config read [FAIL].\n");
       }
@@ -383,7 +383,7 @@ static void usdLogTask(void* prm)
         line = f_gets_without_comments(readBuffer, sizeof(readBuffer), &logFile);
         if (!line) break;
       }
-      
+
       while (line) {
         line = f_gets_without_comments(readBuffer, sizeof(readBuffer), &logFile);
         if (!line) break;
