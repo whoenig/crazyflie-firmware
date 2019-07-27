@@ -44,10 +44,10 @@ enum saturationBits
 };
 
 static struct {
-  uint32_t m1;
-  uint32_t m2;
-  uint32_t m3;
-  uint32_t m4;
+  uint16_t m1;
+  uint16_t m2;
+  uint16_t m3;
+  uint16_t m4;
 } motorPower;
 
 static struct {
@@ -240,9 +240,9 @@ PARAM_ADD(PARAM_UINT16, m4, &motorPowerSet.m4)
 PARAM_GROUP_STOP(ring)
 
 LOG_GROUP_START(motor)
-LOG_ADD(LOG_INT32, m4, &motorPower.m4)
-LOG_ADD(LOG_INT32, m1, &motorPower.m1)
-LOG_ADD(LOG_INT32, m2, &motorPower.m2)
-LOG_ADD(LOG_INT32, m3, &motorPower.m3)
+LOG_ADD(LOG_UINT16, m4, &motorPower.m4)
+LOG_ADD(LOG_UINT16, m1, &motorPower.m1)
+LOG_ADD(LOG_UINT16, m2, &motorPower.m2)
+LOG_ADD(LOG_UINT16, m3, &motorPower.m3)
 LOG_ADD(LOG_UINT8, saturation, &saturationStatus)
 LOG_GROUP_STOP(motor)
