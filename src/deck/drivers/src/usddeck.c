@@ -343,7 +343,6 @@ static void usdInit(DeckInfo *info)
         initSuccess = true;
         break;
       }
-
       if (!initSuccess) {
           DEBUG_PRINT("Config read [FAIL].\n");
       }
