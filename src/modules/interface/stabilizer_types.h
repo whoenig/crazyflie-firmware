@@ -101,6 +101,20 @@ typedef struct positionMeasurement_s {
   float stdDev;
 } positionMeasurement_t;
 
+typedef struct poseMeasurement_s {
+  union {
+    struct {
+      float x;
+      float y;
+      float z;
+    };
+    float pos[3];
+  };
+  quaternion_t quat;
+  float stdDevPos;
+  float stdDevQuat;
+} poseMeasurement_t;
+
 typedef struct distanceMeasurement_s {
   union {
     struct {
@@ -141,11 +155,26 @@ typedef struct state_s {
   acc_t acc;                // Gs (but acc.z without considering gravity)
 } state_t;
 
+typedef enum control_mode_e {
+  controlModeLegacy      = 0, // legacy mode with int16_t roll, pitch, yaw and float thrust
+  controlModeForceTorque = 1,
+} control_mode_t;
+
 typedef struct control_s {
-  int16_t roll;
-  int16_t pitch;
-  int16_t yaw;
-  float thrust;
+  union {
+    struct {
+      // legacy part
+      int16_t roll;
+      int16_t pitch;
+      int16_t yaw;
+      float thrust;
+    };
+    struct {
+      float thrustSI;  // N
+      float torque[3]; // Nm
+    };
+  };
+  control_mode_t controlMode;
 } control_t;
 
 typedef enum mode_e {

@@ -49,6 +49,7 @@
 #include "estimator.h"
 #include "usddeck.h"
 #include "quatcompress.h"
+#include "math3d.h"
 
 static bool isInit;
 static bool emergencyStop = false;
@@ -109,7 +110,25 @@ static struct {
   int16_t ax;
   int16_t ay;
   int16_t az;
+  // compressed quaternion, see quatcompress.h
+  int32_t quat;
+  // angular velocity - milliradians / sec
+  int16_t rateRoll;
+  int16_t ratePitch;
+  int16_t rateYaw;
 } setpointCompressed;
+
+static float accVarX[NBR_OF_MOTORS];
+static float accVarY[NBR_OF_MOTORS];
+static float accVarZ[NBR_OF_MOTORS];
+// Bit field indicating if the motors passed the motor test.
+// Bit 0 - 1 = M1 passed
+// Bit 1 - 1 = M2 passed
+// Bit 2 - 1 = M3 passed
+// Bit 3 - 1 = M4 passed
+// Bit 7 - 1 = Test finished
+static uint8_t motorPass = 0;
+
 
 static void stabilizerTask(void* param);
 static void testProps(sensorData_t *sensors);
@@ -130,9 +149,9 @@ static void compressState()
   stateCompressed.vy = state.velocity.y * 1000.0f;
   stateCompressed.vz = state.velocity.z * 1000.0f;
 
-  stateCompressed.ax = state.acc.x * 1000.0f;
-  stateCompressed.ay = state.acc.y * 1000.0f;
-  stateCompressed.az = state.acc.z * 1000.0f;
+  stateCompressed.ax = state.acc.x * 9.81f * 1000.0f;
+  stateCompressed.ay = state.acc.y * 9.81f * 1000.0f;
+  stateCompressed.az = (state.acc.z + 1) * 9.81f * 1000.0f;
 
   float const q[4] = {
     state.attitudeQuaternion.x,
@@ -143,7 +162,7 @@ static void compressState()
 
   float const deg2millirad = ((float)M_PI * 1000.0f) / 180.0f;
   stateCompressed.rateRoll = sensorData.gyro.x * deg2millirad;
-  stateCompressed.ratePitch = -sensorData.gyro.y * deg2millirad;
+  stateCompressed.ratePitch = sensorData.gyro.y * deg2millirad;
   stateCompressed.rateYaw = sensorData.gyro.z * deg2millirad;
 }
 
@@ -160,6 +179,24 @@ static void compressSetpoint()
   setpointCompressed.ax = setpoint.acceleration.x * 1000.0f;
   setpointCompressed.ay = setpoint.acceleration.y * 1000.0f;
   setpointCompressed.az = setpoint.acceleration.z * 1000.0f;
+
+  struct vec rpy = mkvec(
+    radians(setpoint.attitude.roll),
+    -radians(setpoint.attitude.pitch),
+    radians(setpoint.attitude.yaw));
+  struct quat q= rpy2quat(rpy);
+
+  // float const q[4] = {
+  //   setpoint.attitudeQuaternion.x,
+  //   setpoint.attitudeQuaternion.y,
+  //   setpoint.attitudeQuaternion.z,
+  //   setpoint.attitudeQuaternion.w};
+  setpointCompressed.quat = quatcompress((const float*)&q);
+
+  float const deg2millirad = ((float)M_PI * 1000.0f) / 180.0f;
+  setpointCompressed.rateRoll = setpoint.attitudeRate.roll * deg2millirad;
+  setpointCompressed.ratePitch = setpoint.attitudeRate.pitch * deg2millirad;
+  setpointCompressed.rateYaw = setpoint.attitudeRate.yaw * deg2millirad;
 }
 
 void stabilizerInit(StateEstimatorType estimator)
@@ -254,6 +291,7 @@ static void stabilizerTask(void* param)
       }
       // allow to update controller dynamically
       if (getControllerType() != controllerType) {
+        control.controlMode = controlModeLegacy;
         controllerInit(controllerType);
         controllerType = getControllerType();
       }
@@ -270,7 +308,8 @@ static void stabilizerTask(void* param)
 
       checkEmergencyStopTimeout();
 
-      if (emergencyStop) {
+      bool upsideDown = sensorData.acc.z < -0.5f;
+      if (emergencyStop || upsideDown) {
         powerStop();
       } else {
         powerDistribution(&control);
@@ -331,9 +370,12 @@ static bool evaluateTest(float low, float high, float value, uint8_t motor)
   if (value < low || value > high)
   {
     DEBUG_PRINT("Propeller test on M%d [FAIL]. low: %0.2f, high: %0.2f, measured: %0.2f\n",
-                motor, (double)low, (double)high, (double)value);
+                motor + 1, (double)low, (double)high, (double)value);
     return false;
   }
+
+  motorPass |= (1 << motor);
+
   return true;
 }
 
@@ -344,21 +386,18 @@ static void testProps(sensorData_t *sensors)
   static float accX[PROPTEST_NBR_OF_VARIANCE_VALUES];
   static float accY[PROPTEST_NBR_OF_VARIANCE_VALUES];
   static float accZ[PROPTEST_NBR_OF_VARIANCE_VALUES];
-  static float accVarX[NBR_OF_MOTORS];
-  static float accVarY[NBR_OF_MOTORS];
-  static float accVarZ[NBR_OF_MOTORS];
   static float accVarXnf;
   static float accVarYnf;
   static float accVarZnf;
   static int motorToTest = 0;
   static uint8_t nrFailedTests = 0;
-
   static float idleVoltage;
   static float minSingleLoadedVoltage[NBR_OF_MOTORS];
   static float minLoadedVoltage;
 
   if (testState == configureAcc)
   {
+    motorPass = 0;
     sensorsSetAccMode(ACC_MODE_PROPTEST);
     testState = measureNoiseFloor;
     minLoadedVoltage = idleVoltage = pmGetBatteryVoltage();
@@ -482,7 +521,7 @@ static void testProps(sensorData_t *sensors)
   {
     for (int m = 0; m < NBR_OF_MOTORS; m++)
     {
-      if (!evaluateTest(0, PROPELLER_BALANCE_TEST_THRESHOLD,  accVarX[m] + accVarY[m], m + 1))
+      if (!evaluateTest(0, PROPELLER_BALANCE_TEST_THRESHOLD,  accVarX[m] + accVarY[m], m))
       {
         nrFailedTests++;
         for (int j = 0; j < 3; j++)
@@ -506,6 +545,7 @@ static void testProps(sensorData_t *sensors)
       }
     }
 #endif
+    motorPass |= 0x80;
     testState = testDone;
   }
 }
@@ -518,6 +558,18 @@ PARAM_GROUP_START(stabilizer)
 PARAM_ADD(PARAM_UINT8, estimator, &estimatorType)
 PARAM_ADD(PARAM_UINT8, controller, &controllerType)
 PARAM_GROUP_STOP(stabilizer)
+
+LOG_GROUP_START(health)
+LOG_ADD(LOG_FLOAT, motorVarXM1, &accVarX[0])
+LOG_ADD(LOG_FLOAT, motorVarYM1, &accVarY[0])
+LOG_ADD(LOG_FLOAT, motorVarXM2, &accVarX[1])
+LOG_ADD(LOG_FLOAT, motorVarYM2, &accVarY[1])
+LOG_ADD(LOG_FLOAT, motorVarXM3, &accVarX[2])
+LOG_ADD(LOG_FLOAT, motorVarYM3, &accVarY[2])
+LOG_ADD(LOG_FLOAT, motorVarXM4, &accVarX[3])
+LOG_ADD(LOG_FLOAT, motorVarYM4, &accVarY[3])
+LOG_ADD(LOG_UINT8, motorPass, &motorPass)
+LOG_GROUP_STOP(health)
 
 LOG_GROUP_START(ctrltarget)
 LOG_ADD(LOG_FLOAT, x, &setpoint.position.x)
@@ -549,6 +601,12 @@ LOG_ADD(LOG_INT16, vz, &setpointCompressed.vz)
 LOG_ADD(LOG_INT16, ax, &setpointCompressed.ax) // acceleration - mm / sec^2
 LOG_ADD(LOG_INT16, ay, &setpointCompressed.ay)
 LOG_ADD(LOG_INT16, az, &setpointCompressed.az)
+
+LOG_ADD(LOG_UINT32, quat, &setpointCompressed.quat) // compressed quaternion, see quatcompress.h
+
+LOG_ADD(LOG_INT16, rateRoll, &setpointCompressed.rateRoll)   // angular velocity - milliradians / sec
+LOG_ADD(LOG_INT16, ratePitch, &setpointCompressed.ratePitch)
+LOG_ADD(LOG_INT16, rateYaw, &setpointCompressed.rateYaw)
 LOG_GROUP_STOP(ctrltargetZ)
 
 LOG_GROUP_START(stabilizer)

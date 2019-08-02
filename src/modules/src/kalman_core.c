@@ -63,6 +63,7 @@
 
 #include "log.h"
 #include "param.h"
+#include "math3d.h"
 
 // #define DEBUG_STATE_CHECK
 
@@ -140,7 +141,7 @@ static const float stdDevInitialPosition_xy = 100;
 static const float stdDevInitialPosition_z = 1;
 static const float stdDevInitialVelocity = 0.01;
 static const float stdDevInitialAttitude_rollpitch = 0.01;
-static const float stdDevInitialAttitude_yaw = 0.01;
+static const float stdDevInitialAttitude_yaw = 100;
 
 static float procNoiseAcc_xy = 0.5f;
 static float procNoiseAcc_z = 1.0f;
@@ -326,6 +327,55 @@ void kalmanCoreUpdateWithPosition(kalmanCoreData_t* this, positionMeasurement_t 
     h[KC_STATE_X+i] = 1;
     scalarUpdate(this, &H, xyz->pos[i] - this->S[KC_STATE_X+i], xyz->stdDev);
   }
+}
+
+void kalmanCoreUpdateWithPose(kalmanCoreData_t* this, poseMeasurement_t *pose)
+{
+#if 0
+  // a direct measurement of pose
+  // do a scalar update for each state, since this should be faster than updating all together
+
+  // TODO: currently this is just a position update! Update orientation as well
+
+  for (int i=0; i<3; i++) {
+    float h[KC_STATE_DIM] = {0};
+    arm_matrix_instance_f32 H = {1, KC_STATE_DIM, h};
+    h[KC_STATE_X+i] = 1;
+    scalarUpdate(this, &H, pose->pos[i] - this->S[KC_STATE_X+i], pose->stdDevPos);
+  }
+#else
+  // a direct measurement of states x, y, and z, and orientation
+  // do a scalar update for each state, since this should be faster than updating all together
+  for (int i=0; i<3; i++) {
+    float h[KC_STATE_DIM] = {0};
+    arm_matrix_instance_f32 H = {1, KC_STATE_DIM, h};
+    h[KC_STATE_X+i] = 1;
+    scalarUpdate(this, &H, pose->pos[i] - this->S[KC_STATE_X+i], pose->stdDevPos);
+  }
+
+  // compute orientation error
+  struct quat const q_ekf = mkquat(this->q[1], this->q[2], this->q[3], this->q[0]);
+  struct quat const q_measured = mkquat(pose->quat.x, pose->quat.y, pose->quat.z, pose->quat.w);
+  struct quat const q_residual = qqmul(qinv(q_ekf), q_measured);
+  // small angle approximation, see eq. 141 in http://mars.cs.umn.edu/tr/reports/Trawny05b.pdf
+  struct vec const err_quat = vscl(2.0f / q_residual.w, quatimagpart(q_residual));
+
+  // do a scalar update for each state
+  {
+    float h[KC_STATE_DIM] = {0};
+    arm_matrix_instance_f32 H = {1, KC_STATE_DIM, h};
+    h[KC_STATE_D0] = 1;
+    scalarUpdate(this, &H, err_quat.x, pose->stdDevQuat);
+    h[KC_STATE_D0] = 0;
+
+    h[KC_STATE_D1] = 1;
+    scalarUpdate(this, &H, err_quat.y, pose->stdDevQuat);
+    h[KC_STATE_D1] = 0;
+
+    h[KC_STATE_D2] = 1;
+    scalarUpdate(this, &H, err_quat.z, pose->stdDevQuat);
+  }
+#endif
 }
 
 void kalmanCoreUpdateWithDistance(kalmanCoreData_t* this, distanceMeasurement_t *d)

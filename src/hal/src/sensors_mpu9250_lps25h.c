@@ -52,12 +52,6 @@
 #include "sound.h"
 #include "filter.h"
 
-/**
- * Enable 250Hz digital LPF mode. However does not work with
- * multiple slave reading through MPU9250 (MAG and BARO), only single for some reason.
- */
-//#define SENSORS_MPU6500_DLPF_256HZ
-
 #define SENSORS_ENABLE_PRESSURE_LPS25H
 //#define GYRO_ADD_RAW_AND_VARIANCE_LOG_VALUES
 
@@ -89,7 +83,7 @@
 // Number of samples used in variance calculation. Changing this effects the threshold
 #define SENSORS_NBR_OF_BIAS_SAMPLES     1024
 // Variance threshold to take zero bias for gyro
-#define GYRO_VARIANCE_BASE          5000
+#define GYRO_VARIANCE_BASE          10000
 #define GYRO_VARIANCE_THRESHOLD_X   (GYRO_VARIANCE_BASE)
 #define GYRO_VARIANCE_THRESHOLD_Y   (GYRO_VARIANCE_BASE)
 #define GYRO_VARIANCE_THRESHOLD_Z   (GYRO_VARIANCE_BASE)
@@ -141,6 +135,18 @@ static bool isMpu6500TestPassed = false;
 static bool isAK8963TestPassed = false;
 static bool isLPS25HTestPassed = false;
 
+static enum
+{
+  GYRO_MODE_BW92 = 0, // [default CF firmware] 92 Hz Bandwidth, 3.9ms delay, Fs = 1000 Hz
+  GYRO_MODE_BW184,    // 184 Hz Bandwidth, 2.9ms delay, Fs = 1000 Hz
+  GYRO_MODE_BW250,    // 250 Hz bandwidth, 0.97ms delay, Fs = 8000 Hz
+  GYRO_MODE_BW3600,   // 3600 Hz bandwidth, 0.11ms delay, Fs = 32000 Hz
+  GYRO_MODE_BW8800,   // 8800 Hz bandwidth, 0.064ms delay, Fs = 32000 Hz
+} gyroMode;
+static bool useLpfGyro = true;
+static bool useLpfAcc = true;
+
+
 // Pre-calculated values for accelerometer alignment
 float cosPitch;
 float sinPitch;
@@ -167,6 +173,7 @@ static void sensorsCalculateBiasMean(BiasObj* bias, Axis3i32* meanOut);
 static void sensorsAddBiasValue(BiasObj* bias, int16_t x, int16_t y, int16_t z);
 static bool sensorsFindBiasValue(BiasObj* bias);
 static void sensorsAccAlignToGravity(Axis3f* in, Axis3f* out);
+static void sensorsSwitchMode(void);
 
 bool sensorsMpu9250Lps25hReadGyro(Axis3f *gyro)
 {
@@ -210,8 +217,15 @@ static void sensorsTask(void *param)
 
   sensorsSetupSlaveRead();
 
+  uint8_t lastGyroMode = gyroMode;
+
   while (1)
   {
+    if (lastGyroMode != gyroMode) {
+      sensorsSwitchMode();
+      lastGyroMode = gyroMode;
+    }
+
     if (pdTRUE == xSemaphoreTake(sensorsDataReady, portMAX_DELAY))
     {
       sensorData.interruptTimestamp = imuIntTimestamp;
@@ -309,16 +323,60 @@ void processAccGyroMeasurements(const uint8_t *buffer)
      processAccScale(accelRaw.x, accelRaw.y, accelRaw.z);
   }
 
-  sensorData.gyro.x = -(gyroRaw.x - gyroBias.x) * SENSORS_DEG_PER_LSB_CFG;
-  sensorData.gyro.y =  (gyroRaw.y - gyroBias.y) * SENSORS_DEG_PER_LSB_CFG;
-  sensorData.gyro.z =  (gyroRaw.z - gyroBias.z) * SENSORS_DEG_PER_LSB_CFG;
-  applyAxis3fLpf((lpf2pData*)(&gyroLpf), &sensorData.gyro);
+  sensorData.gyro.x = -((float)gyroRaw.x - gyroBias.x) * SENSORS_DEG_PER_LSB_CFG;
+  sensorData.gyro.y =  ((float)gyroRaw.y - gyroBias.y) * SENSORS_DEG_PER_LSB_CFG;
+  sensorData.gyro.z =  ((float)gyroRaw.z - gyroBias.z) * SENSORS_DEG_PER_LSB_CFG;
+  if (useLpfGyro) {
+    applyAxis3fLpf((lpf2pData*)(&gyroLpf), &sensorData.gyro);
+  }
 
   accScaled.x = -(accelRaw.x) * SENSORS_G_PER_LSB_CFG / accScale;
   accScaled.y =  (accelRaw.y) * SENSORS_G_PER_LSB_CFG / accScale;
   accScaled.z =  (accelRaw.z) * SENSORS_G_PER_LSB_CFG / accScale;
   sensorsAccAlignToGravity(&accScaled, &sensorData.acc);
-  applyAxis3fLpf((lpf2pData*)(&accLpf), &sensorData.acc);
+  if (useLpfAcc) {
+    applyAxis3fLpf((lpf2pData*)(&accLpf), &sensorData.acc);
+  }
+}
+
+static void sensorsSwitchMode(void)
+{
+  // Gyro modes (see page 13 in RM-MPU-9250A-00-v1.6.pdf):
+  switch (gyroMode)
+  {
+  case GYRO_MODE_BW92:
+    // // 1. [default CF firmware] 92 Hz Bandwidth, 3.9ms delay, Fs = 1000 Hz
+    mpu6500SetRate(0); // 1000 / (1 + 0) = 1000Hz
+    mpu6500SetDLPFMode(MPU6500_DLPF_BW_98);
+    break;
+  case GYRO_MODE_BW184:
+    // 2. 184 Hz Bandwidth, 2.9ms delay, Fs = 1000 Hz
+    mpu6500SetRate(0); // 1000 / (1 + 0) = 1000Hz
+    mpu6500SetDLPFMode(MPU6500_DLPF_BW_188);
+    break;
+  case GYRO_MODE_BW250:
+    // 3. 250 Hz bandwidth, 0.97ms delay, Fs = 8000 Hz
+    mpu6500SetRate(7); // 8000 / (1 + 7) = 1000Hz
+    mpu6500SetDLPFMode(MPU6500_DLPF_BW_256);
+    break;
+  case GYRO_MODE_BW3600:
+    // 4. 3600 Hz bandwidth, 0.11ms delay, Fs = 32000 Hz
+    mpu6500SetRate(31); // 32000 / (1 + 31) = 1000Hz
+    mpu9250SetFchoiceInverted(2); // Fchoice = b01 => inverted = b10
+    break;
+  case GYRO_MODE_BW8800:
+    // 5. 8800 Hz bandwidth, 0.064ms delay, Fs = 32000 Hz
+    mpu6500SetRate(31); // 32000 / (1 + 31) = 1000Hz
+    mpu9250SetFchoiceInverted(1); // Fchoice = bx0 => inverted = bx1
+    break;
+  }
+
+  // Init SW low-pass filters
+  for (uint8_t i = 0; i < 3; i++)
+  {
+    lpf2pInit(&gyroLpf[i], 1000, GYRO_LPF_CUTOFF_FREQ);
+    lpf2pInit(&accLpf[i],  1000, ACCEL_LPF_CUTOFF_FREQ);
+  }
 }
 
 static void sensorsDeviceInit(void)
@@ -362,27 +420,10 @@ static void sensorsDeviceInit(void)
   mpu6500SetFullScaleAccelRange(SENSORS_ACCEL_FS_CFG);
   // Set accelerometer digital low-pass bandwidth
   mpu6500SetAccelDLPF(MPU6500_ACCEL_DLPF_BW_41);
+  // mpu6500SetAccelDLPF(MPU6500_ACCEL_DLPF_BW_460);
 
-#if SENSORS_MPU6500_DLPF_256HZ
-  // 256Hz digital low-pass filter only works with little vibrations
-  // Set output rate (15): 8000 / (1 + 7) = 1000Hz
-  mpu6500SetRate(7);
-  // Set digital low-pass bandwidth
-  mpu6500SetDLPFMode(MPU6500_DLPF_BW_256);
-#else
-  // To low DLPF bandwidth might cause instability and decrease agility
-  // but it works well for handling vibrations and unbalanced propellers
-  // Set output rate (1): 1000 / (1 + 0) = 1000Hz
-  mpu6500SetRate(0);
-  // Set digital low-pass bandwidth for gyro
-  mpu6500SetDLPFMode(MPU6500_DLPF_BW_98);
-  // Init second order filer for accelerometer
-  for (uint8_t i = 0; i < 3; i++)
-  {
-    lpf2pInit(&gyroLpf[i], 1000, GYRO_LPF_CUTOFF_FREQ);
-    lpf2pInit(&accLpf[i],  1000, ACCEL_LPF_CUTOFF_FREQ);
-  }
-#endif
+  gyroMode = GYRO_MODE_BW92;
+  sensorsSwitchMode();
 
 
 #ifdef SENSORS_ENABLE_MAG_AK8963
@@ -424,13 +465,13 @@ static void sensorsDeviceInit(void)
 static void sensorsSetupSlaveRead(void)
 {
   // Now begin to set up the slaves
-#ifdef SENSORS_MPU6500_DLPF_256HZ
-  // As noted in registersheet 4.4: "Data should be sampled at or above sample rate;
-  // SMPLRT_DIV is only used for 1kHz internal sampling." Slowest update rate is then 500Hz.
-  mpu6500SetSlave4MasterDelay(15); // read slaves at 500Hz = (8000Hz / (1 + 15))
-#else
-  mpu6500SetSlave4MasterDelay(9); // read slaves at 100Hz = (500Hz / (1 + 4))
-#endif
+  if (gyroMode == GYRO_MODE_BW250) {
+    // As noted in registersheet 4.4: "Data should be sampled at or above sample rate;
+    // SMPLRT_DIV is only used for 1kHz internal sampling." Slowest update rate is then 500Hz.
+    mpu6500SetSlave4MasterDelay(15); // read slaves at 500Hz = (8000Hz / (1 + 15))
+  } else {
+    mpu6500SetSlave4MasterDelay(9); // read slaves at 100Hz = (500Hz / (1 + 4))
+  }
 
   mpu6500SetI2CBypassEnabled(false);
   mpu6500SetWaitForExternalSensorEnabled(true); // the slave data isn't so important for the state estimation
@@ -920,6 +961,10 @@ LOG_GROUP_STOP(gyro)
 PARAM_GROUP_START(imu_sensors)
 PARAM_ADD(PARAM_UINT8 | PARAM_RONLY, HMC5883L, &isMagnetometerPresent)
 PARAM_ADD(PARAM_UINT8 | PARAM_RONLY, MS5611, &isBarometerPresent) // TODO: Rename MS5611 to LPS25H. Client needs to be updated at the same time.
+
+PARAM_ADD(PARAM_UINT8, gyroMode, &gyroMode)
+PARAM_ADD(PARAM_UINT8, useLpfGyro, &useLpfGyro)
+PARAM_ADD(PARAM_UINT8, useLpfAcc, &useLpfAcc)
 PARAM_GROUP_STOP(imu_sensors)
 
 PARAM_GROUP_START(imu_tests)
