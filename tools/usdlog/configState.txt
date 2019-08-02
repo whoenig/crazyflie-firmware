@@ -1,0 +1,24 @@
+100   # frequency
+50    # buffer size
+log   # file name
+0     # enable on startup (0/1)
+1     # mode (0: disabled, 1: synchronous stabilizer, 2: asynchronous)
+stateEstimateZ.x
+stateEstimateZ.y
+stateEstimateZ.z
+stateEstimateZ.vx
+stateEstimateZ.vy
+stateEstimateZ.vz
+stateEstimateZ.quat
+ctrltargetZ.x
+ctrltargetZ.y
+ctrltargetZ.z
+ctrltargetZ.vx
+ctrltargetZ.vy
+ctrltargetZ.vz
+locSrvZ.x
+locSrvZ.y
+locSrvZ.z
+locSrvZ.quat
+locSrvZ.time
+
