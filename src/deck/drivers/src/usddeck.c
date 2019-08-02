@@ -115,6 +115,7 @@ static TaskHandle_t xHandleWriteTask;
 
 static bool enableLogging;
 static uint32_t lastFileSize = 0;
+static uint64_t initialTime;
 
 static xTimerHandle timer;
 static void usdTimer(xTimerHandle timer);
@@ -478,7 +479,7 @@ void usddeckTriggerLogging(void)
   }
 
   /* write data into buffer */
-  uint32_t ticks = xTaskGetTickCount();
+  uint32_t ticks = usecTimestamp() - initialTime;
   memcpy(usdLogBuffer, &ticks, 4);
   int offset = 4;
   for (int i = 0; i < usdLogConfig.numSlots; ++i) {
@@ -569,6 +570,7 @@ static void usdWriteTask(void* usdLogQueue)
   {
     vTaskSuspend(NULL);
     if (enableLogging) {
+      initialTime = usecTimestamp();
       xSemaphoreTake(logFileMutex, portMAX_DELAY);
       lastFileSize = 0;
       usdLogBuffer = usdLogBufferStart;
