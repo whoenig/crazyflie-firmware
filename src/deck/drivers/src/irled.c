@@ -54,36 +54,36 @@ static uint8_t ratio = 237;
 static void irLedSetRatio(uint8_t ratio);
 #endif
 
-static xTimerHandle timer;
+// static xTimerHandle timer;
 
 #ifdef USE_DIGITAL
-static uint8_t my_id;
-static bool parity;
+// static uint8_t my_id;
+// static bool parity;
 
-static enum
-{
-  Start,
-  TransmitHigh1,
-  TransmitBit1,
-  TransmitHigh2,
-  TransmitBit2,
-  TransmitHigh3,
-  TransmitBit3,
-  TransmitHigh4,
-  TransmitBit4,
-  TransmitHigh5,
-  TransmitBit5,
-  TransmitHigh6,
-  TransmitBit6,
-  TransmitHigh7,
-  TransmitBit7,
-  TransmitHigh8,
-  TransmitBit8,
-  TransmitHigh9,
-  TransmitParity,
-  Stop,
-  Wait,
-} irLedState;
+// static enum
+// {
+//   Start,
+//   TransmitHigh1,
+//   TransmitBit1,
+//   TransmitHigh2,
+//   TransmitBit2,
+//   TransmitHigh3,
+//   TransmitBit3,
+//   TransmitHigh4,
+//   TransmitBit4,
+//   TransmitHigh5,
+//   TransmitBit5,
+//   TransmitHigh6,
+//   TransmitBit6,
+//   TransmitHigh7,
+//   TransmitBit7,
+//   TransmitHigh8,
+//   TransmitBit8,
+//   TransmitHigh9,
+//   TransmitParity,
+//   Stop,
+//   Wait,
+// } irLedState;
 
 static void setLed(bool on) {
   if (on) {
@@ -94,69 +94,69 @@ static void setLed(bool on) {
 }
 #endif
 
-static void irLedTimer(xTimerHandle timer)
-{
-#ifdef USE_DIGITAL
-  switch(irLedState) {
-  case TransmitHigh1:
-  case TransmitHigh2:
-  case TransmitHigh3:
-  case TransmitHigh4:
-  case TransmitHigh5:
-  case TransmitHigh6:
-  case TransmitHigh7:
-  case TransmitHigh8:
-  case TransmitHigh9:
-  case Stop:
-    setLed(true);
-    break;
-  case Start:
-    setLed(false);
-    break;
-  case TransmitBit1:
-    setLed((my_id >> 0) & 0x1);
-    break;
-  case TransmitBit2:
-    setLed((my_id >> 1) & 0x1);
-    break;
-  case TransmitBit3:
-    setLed((my_id >> 2) & 0x1);
-    break;
-  case TransmitBit4:
-    setLed((my_id >> 3) & 0x1);
-    break;
-  case TransmitBit5:
-    setLed((my_id >> 4) & 0x1);
-    break;
-  case TransmitBit6:
-    setLed((my_id >> 5) & 0x1);
-    break;
-  case TransmitBit7:
-    setLed((my_id >> 6) & 0x1);
-    break;
-  case TransmitBit8:
-    setLed((my_id >> 7) & 0x1);
-    break;
-  case TransmitParity:
-    setLed(parity);
-    break;
-  default:
-    setLed(true);
-    break;
-  }
+// static void irLedTimer(xTimerHandle timer)
+// {
+// #ifdef USE_DIGITAL
+//   switch(irLedState) {
+//   case TransmitHigh1:
+//   case TransmitHigh2:
+//   case TransmitHigh3:
+//   case TransmitHigh4:
+//   case TransmitHigh5:
+//   case TransmitHigh6:
+//   case TransmitHigh7:
+//   case TransmitHigh8:
+//   case TransmitHigh9:
+//   case Stop:
+//     setLed(true);
+//     break;
+//   case Start:
+//     setLed(false);
+//     break;
+//   case TransmitBit1:
+//     setLed((my_id >> 0) & 0x1);
+//     break;
+//   case TransmitBit2:
+//     setLed((my_id >> 1) & 0x1);
+//     break;
+//   case TransmitBit3:
+//     setLed((my_id >> 2) & 0x1);
+//     break;
+//   case TransmitBit4:
+//     setLed((my_id >> 3) & 0x1);
+//     break;
+//   case TransmitBit5:
+//     setLed((my_id >> 4) & 0x1);
+//     break;
+//   case TransmitBit6:
+//     setLed((my_id >> 5) & 0x1);
+//     break;
+//   case TransmitBit7:
+//     setLed((my_id >> 6) & 0x1);
+//     break;
+//   case TransmitBit8:
+//     setLed((my_id >> 7) & 0x1);
+//     break;
+//   case TransmitParity:
+//     setLed(parity);
+//     break;
+//   default:
+//     setLed(true);
+//     break;
+//   }
 
-  if (irLedState == Wait + 200) {
-    irLedState = Start;
-  } else {
-    irLedState += 1;
-  }
-#endif
+//   if (irLedState == Wait + 200) {
+//     irLedState = Start;
+//   } else {
+//     irLedState += 1;
+//   }
+// #endif
 
-#ifdef USE_PWM
-  irLedSetRatio(ratio);
-#endif
+// #ifdef USE_PWM
+//   irLedSetRatio(ratio);
+// #endif
 
-}
+// }
 
 
 #ifdef USE_PWM
@@ -204,18 +204,18 @@ static void irLedInit(DeckInfo *info)
   pinMode(DECK_GPIO_TX2, OUTPUT);
   setLed(true);
 
-  uint64_t address = configblockGetRadioAddress();
-  my_id = address & 0xFF;
-  parity = false;
-  for (int i = 0; i < 8; ++i) {
-    parity = parity ^ ((my_id >> i) & 0x1);
-  }
+  // uint64_t address = configblockGetRadioAddress();
+  // my_id = address & 0xFF;
+  // parity = false;
+  // for (int i = 0; i < 8; ++i) {
+  //   parity = parity ^ ((my_id >> i) & 0x1);
+  // }
 
-  irLedState = Start;
+  // irLedState = Start;
 
-  timer = xTimerCreate( "irLedTimer", M2T(10),
-                                     pdTRUE, NULL, irLedTimer );
-  xTimerStart(timer, 100);
+  // timer = xTimerCreate( "irLedTimer", M2T(10),
+  //                                    pdTRUE, NULL, irLedTimer );
+  // xTimerStart(timer, 100);
 #endif
 
 #ifdef USE_PWM
