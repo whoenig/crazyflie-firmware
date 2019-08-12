@@ -6,6 +6,7 @@
 #include "controller_pid.h"
 #include "controller_mellinger.h"
 #include "controller_sjc.h"
+#include "controller_mellingerSI.h"
 
 
 #define DEFAULT_CONTROLLER ControllerTypePID
@@ -25,6 +26,7 @@ static ControllerFcns controllerFunctions[] = {
   {.init = controllerPidInit, .test = controllerPidTest, .update = controllerPid, .name = "PID"},
   {.init = controllerMellingerInit, .test = controllerMellingerTest, .update = controllerMellinger, .name = "Mellinger"},
   {.init = controllerSJCInit, .test = controllerSJCTest, .update = controllerSJC, .name = "SJC"},
+  {.init = controllerMellingerSIInit, .test = controllerMellingerSITest, .update = controllerMellingerSI, .name = "MellingerSI"},
 };
 
 
