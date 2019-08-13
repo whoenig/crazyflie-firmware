@@ -53,6 +53,7 @@ Notes:
 #include "network.h"
 #include "usec_time.h"
 // #include "debug.h"
+#include "power_distribution.h"
 
 #define GRAVITY_MAGNITUDE (9.81f)
 
@@ -102,6 +103,10 @@ static struct vec omega_r;
 static struct vec qrp;
 static struct vec qr_dot;
 
+static struct vec Fa;
+
+// TODO: Hacky
+extern struct motorPower_s motorPower;
 
 static inline struct vec vclampscl(struct vec value, float min, float max) {
   return mkvec(
@@ -160,7 +165,27 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
   // qr: Desired/reference angles in rad
   // struct vec qr;
   uint64_t startTime = usecTimestamp();
+
+  // inputs:
+  // pos_z [m]
+  // vel [m/s]
+  // qua (x,y,z,w) 
+  // each motor thrust [normalized 0..1]
+  input[0] = state->position.z;
+  input[1] = state->velocity.x;
+  input[2] = state->velocity.y;
+  input[3] = state->velocity.z;
+  input[4] = state->attitudeQuaternion.x;
+  input[5] = state->attitudeQuaternion.y;
+  input[6] = state->attitudeQuaternion.z;
+  input[7] = state->attitudeQuaternion.w;
+  input[8] = motorPower.m1 / 65535.0;
+  input[9] = motorPower.m2 / 65535.0;
+  input[10] = motorPower.m3 / 65535.0;
+  input[10] = motorPower.m4 / 65535.0;
+
   network(&control_n, input);
+  Fa = mkvec(control_n.out_0, control_n.out_1, control_n.out_2);
   ticks = usecTimestamp() - startTime;
 
   // Position controller
@@ -378,4 +403,9 @@ LOG_ADD(LOG_FLOAT, qrpz, &qrp.z)
 LOG_ADD(LOG_FLOAT, qrdotz, &qr_dot.z)
 
 LOG_ADD(LOG_UINT32, ticks, &ticks)
+
+LOG_ADD(LOG_FLOAT, Fax, &Fa.x)
+LOG_ADD(LOG_FLOAT, Fay, &Fa.y)
+LOG_ADD(LOG_FLOAT, Faz, &Fa.z)
+
 LOG_GROUP_STOP(ctrlSJC)
