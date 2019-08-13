@@ -8,7 +8,7 @@
 #include "controller_sjc.h"
 
 
-#define DEFAULT_CONTROLLER ControllerTypePID
+#define DEFAULT_CONTROLLER ControllerTypeSJC
 static ControllerType currentController = ControllerTypeAny;
 
 static void initController();

@@ -50,9 +50,13 @@ Notes:
 #include "log.h"
 #include "math3d.h"
 #include "controller_sjc.h"
+#include "network.h"
+#include "usec_time.h"
 // #include "debug.h"
 
 #define GRAVITY_MAGNITUDE (9.81f)
+
+static uint32_t ticks;
 
 static float g_vehicleMass = 0.033; // TODO: should be CF global for other modules
 
@@ -132,6 +136,8 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
                                          const state_t *state,
                                          const uint32_t tick)
 {
+  net_outputs control_n;
+  float input[12];
   if (!RATE_DO_EXECUTE(ATTITUDE_RATE, tick)) {
     return;
   }
@@ -153,6 +159,9 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
 
   // qr: Desired/reference angles in rad
   // struct vec qr;
+  uint64_t startTime = usecTimestamp();
+  network(&control_n, input);
+  ticks = usecTimestamp() - startTime;
 
   // Position controller
   if (   setpoint->mode.x == modeAbs
@@ -174,6 +183,7 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
       veltmul(Kpos_D, vel_e),
       veltmul(Kpos_P, pos_e),
       veltmul(Kpos_I, i_error_pos)));
+
 
     control->thrustSI = vmag(F_d);
     // Reset the accumulated error while on the ground
@@ -367,5 +377,5 @@ LOG_ADD(LOG_FLOAT, qrpz, &qrp.z)
 
 LOG_ADD(LOG_FLOAT, qrdotz, &qr_dot.z)
 
-
+LOG_ADD(LOG_UINT32, ticks, &ticks)
 LOG_GROUP_STOP(ctrlSJC)
