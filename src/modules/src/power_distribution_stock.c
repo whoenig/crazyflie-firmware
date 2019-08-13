@@ -52,6 +52,11 @@ static struct {
   uint16_t m4;
 } motorPowerSet;
 
+static float g_thrustpart;
+static float g_rollpart;
+static float g_pitchpart;
+static float g_yawpart;
+
 void powerDistributionInit(void)
 {
   motorsInit(motorMapDefaultBrushed);
@@ -127,6 +132,11 @@ static void powerDistributionForceTorque(const control_t *control)
   motorForce[1] = thrustpart - rollpart + pitchpart - yawpart;
   motorForce[2] = thrustpart + rollpart + pitchpart + yawpart;
   motorForce[3] = thrustpart + rollpart - pitchpart - yawpart;
+
+  g_thrustpart = thrustpart;
+  g_rollpart = rollpart;
+  g_pitchpart = pitchpart;
+  g_yawpart = yawpart;
 #else
   // Thrust mixing similar to PX4 (see https://px4.github.io/Firmware-Doxygen/d7/d2a/mixer__multirotor_8cpp_source.html)
   // 1. Mix thrust, roll, pitch without yaw
@@ -235,9 +245,16 @@ PARAM_ADD(PARAM_UINT16, m4, &motorPowerSet.m4)
 PARAM_GROUP_STOP(ring)
 
 LOG_GROUP_START(motor)
-LOG_ADD(LOG_INT32, m4, &motorPower.m4)
-LOG_ADD(LOG_INT32, m1, &motorPower.m1)
-LOG_ADD(LOG_INT32, m2, &motorPower.m2)
-LOG_ADD(LOG_INT32, m3, &motorPower.m3)
+LOG_ADD(LOG_UINT16, m4, &motorPower.m4)
+LOG_ADD(LOG_UINT16, m1, &motorPower.m1)
+LOG_ADD(LOG_UINT16, m2, &motorPower.m2)
+LOG_ADD(LOG_UINT16, m3, &motorPower.m3)
 LOG_ADD(LOG_UINT8, saturation, &saturationStatus)
+
+
+LOG_ADD(LOG_FLOAT, thrust, &g_thrustpart)
+LOG_ADD(LOG_FLOAT, roll, &g_rollpart)
+LOG_ADD(LOG_FLOAT, pitch, &g_pitchpart)
+LOG_ADD(LOG_FLOAT, yaw, &g_yawpart)
+
 LOG_GROUP_STOP(motor)

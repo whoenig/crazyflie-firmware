@@ -115,6 +115,7 @@ static TaskHandle_t xHandleWriteTask;
 
 static bool enableLogging;
 static uint32_t lastFileSize = 0;
+static uint64_t initialTime;
 
 static xTimerHandle timer;
 static void usdTimer(xTimerHandle timer);
@@ -238,7 +239,7 @@ TCHAR* f_gets_without_comments (
     if (c == '\n') {
       break;   /* Break on EOL */
     }
-    if (isspace(c)) {
+    if (isspace((int)c)) {
       continue; /* Strip whitespace */
     }
     if (c == '#') {
@@ -342,7 +343,6 @@ static void usdInit(DeckInfo *info)
         initSuccess = true;
         break;
       }
-      
       if (!initSuccess) {
           DEBUG_PRINT("Config read [FAIL].\n");
       }
@@ -383,7 +383,7 @@ static void usdLogTask(void* prm)
         line = f_gets_without_comments(readBuffer, sizeof(readBuffer), &logFile);
         if (!line) break;
       }
-      
+
       while (line) {
         line = f_gets_without_comments(readBuffer, sizeof(readBuffer), &logFile);
         if (!line) break;
@@ -478,7 +478,7 @@ void usddeckTriggerLogging(void)
   }
 
   /* write data into buffer */
-  uint32_t ticks = xTaskGetTickCount();
+  uint32_t ticks = usecTimestamp() - initialTime;
   memcpy(usdLogBuffer, &ticks, 4);
   int offset = 4;
   for (int i = 0; i < usdLogConfig.numSlots; ++i) {
@@ -569,6 +569,7 @@ static void usdWriteTask(void* usdLogQueue)
   {
     vTaskSuspend(NULL);
     if (enableLogging) {
+      initialTime = usecTimestamp();
       xSemaphoreTake(logFileMutex, portMAX_DELAY);
       lastFileSize = 0;
       usdLogBuffer = usdLogBufferStart;
@@ -581,15 +582,19 @@ static void usdWriteTask(void* usdLogQueue)
         while(usdLogConfig.filename[NUL] != '\0') {
           NUL++;
         }
+        /* Update filenumber up to <name>99 */
         while (f_stat(usdLogConfig.filename, &fno) == FR_OK) {
           /* increase file */
-          switch(usdLogConfig.filename[NUL-1]) {
-            case '9':
+          if (usdLogConfig.filename[NUL-1] == '9') {
+            if (usdLogConfig.filename[NUL-2] == '9') {
+              DEBUG_PRINT("W: Overwrite %s\n", usdLogConfig.filename);
+              break;
+            } else {
               usdLogConfig.filename[NUL-1] = '0';
               usdLogConfig.filename[NUL-2]++;
-              break;
-            default:
-              usdLogConfig.filename[NUL-1]++;
+            }
+          } else {
+            usdLogConfig.filename[NUL-1]++;
           }
         }
       }

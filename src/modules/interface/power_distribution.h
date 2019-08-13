@@ -29,10 +29,10 @@
 #include "stabilizer_types.h"
 
 struct motorPower_s {
-  uint32_t m1;
-  uint32_t m2;
-  uint32_t m3;
-  uint32_t m4;
+  uint16_t m1;
+  uint16_t m2;
+  uint16_t m3;
+  uint16_t m4;
 };
 
 void powerDistributionInit(void);

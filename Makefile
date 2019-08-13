@@ -160,6 +160,9 @@ PROJ_OBJ += controller.o controller_pid.o controller_mellinger.o
 PROJ_OBJ += power_distribution_$(POWER_DISTRIBUTION).o
 PROJ_OBJ += estimator_kalman.o kalman_core.o
 PROJ_OBJ += controller_sjc.o
+PROJ_OBJ += controller_mellingerSI.o
+PROJ_OBJ += controller_lee.o
+PROJ_OBJ += controller_shi.o
 
 # High-Level Commander
 PROJ_OBJ += crtp_commander_high_level.o planner.o pptraj.o
@@ -192,7 +195,9 @@ PROJ_OBJ += flowdeck_v1v2.o
 PROJ_OBJ += oa.o
 PROJ_OBJ += multiranger.o
 PROJ_OBJ += lighthouse.o
+PROJ_OBJ += irled.o
 PROJ_OBJ += network.o
+
 
 ifeq ($(LPS_TDOA_ENABLE), 1)
 CFLAGS += -DLPS_TDOA_ENABLE
