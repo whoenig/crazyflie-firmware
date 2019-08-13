@@ -34,6 +34,13 @@ We added the following:
  * Support to use this controller as an attitude-only controller for manual flight
 
  * This version uses SI units and math3d
+
+
+TODO
+ * switch position controller
+ * remove integral part from attitude controller
+ * Tune yaw
+
 */
 
 #include <math.h>

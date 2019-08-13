@@ -582,15 +582,19 @@ static void usdWriteTask(void* usdLogQueue)
         while(usdLogConfig.filename[NUL] != '\0') {
           NUL++;
         }
+        /* Update filenumber up to <name>99 */
         while (f_stat(usdLogConfig.filename, &fno) == FR_OK) {
           /* increase file */
-          switch(usdLogConfig.filename[NUL-1]) {
-            case '9':
+          if (usdLogConfig.filename[NUL-1] == '9') {
+            if (usdLogConfig.filename[NUL-2] == '9') {
+              DEBUG_PRINT("W: Overwrite %s\n", usdLogConfig.filename);
+              break;
+            } else {
               usdLogConfig.filename[NUL-1] = '0';
               usdLogConfig.filename[NUL-2]++;
-              break;
-            default:
-              usdLogConfig.filename[NUL-1]++;
+            }
+          } else {
+            usdLogConfig.filename[NUL-1]++;
           }
         }
       }
