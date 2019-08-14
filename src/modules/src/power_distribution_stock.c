@@ -57,10 +57,13 @@ static struct {
   uint16_t m4;
 } motorPowerSet;
 
-static float g_thrustpart;
+// static float g_thrustpart;
 static float g_rollpart;
 static float g_pitchpart;
 static float g_yawpart;
+
+static float thrust;
+static struct vec torque;
 
 void powerDistributionInit(void)
 {
@@ -115,6 +118,8 @@ static void powerDistributionLegacy(const control_t *control)
 static void powerDistributionForceTorque(const control_t *control)
 {
   // On CF2, thrust is mapped 65536 <==> 60 grams
+  thrust = control->thrustSI;
+  torque = mkvec(control->torque[0], control->torque[1], control->torque[2]);
 
   // see https://github.com/jpreiss/libquadrotor/blob/master/src/quad_control.c
   const float thrust_to_torque = 0.006f;
@@ -138,7 +143,7 @@ static void powerDistributionForceTorque(const control_t *control)
   motorForce[2] = thrustpart + rollpart + pitchpart + yawpart;
   motorForce[3] = thrustpart + rollpart - pitchpart - yawpart;
 
-  g_thrustpart = thrustpart;
+  // g_thrustpart = thrustpart;
   g_rollpart = rollpart;
   g_pitchpart = pitchpart;
   g_yawpart = yawpart;
@@ -208,10 +213,10 @@ static void powerDistributionForceTorque(const control_t *control)
 #endif
   // for CF2, motorratio directly maps to thrust (not rpm etc.)
   // Thus, we only need to scale the values here
-  motorPower.m1 = limitThrust(motorForce[0] / max_thrust * 65536);
-  motorPower.m2 = limitThrust(motorForce[1] / max_thrust * 65536);
-  motorPower.m3 = limitThrust(motorForce[2] / max_thrust * 65536);
-  motorPower.m4 = limitThrust(motorForce[3] / max_thrust * 65536);
+  motorPower.m1 = limitThrust(motorForce[0] / max_thrust * UINT16_MAX);
+  motorPower.m2 = limitThrust(motorForce[1] / max_thrust * UINT16_MAX);
+  motorPower.m3 = limitThrust(motorForce[2] / max_thrust * UINT16_MAX);
+  motorPower.m4 = limitThrust(motorForce[3] / max_thrust * UINT16_MAX);
 
   motorsSetRatio(MOTOR_M1, motorPower.m1);
   motorsSetRatio(MOTOR_M2, motorPower.m2);
@@ -257,9 +262,14 @@ LOG_ADD(LOG_UINT16, m3, &motorPower.m3)
 LOG_ADD(LOG_UINT8, saturation, &saturationStatus)
 
 
-LOG_ADD(LOG_FLOAT, thrust, &g_thrustpart)
+// LOG_ADD(LOG_FLOAT, thrust, &g_thrustpart)
 LOG_ADD(LOG_FLOAT, roll, &g_rollpart)
 LOG_ADD(LOG_FLOAT, pitch, &g_pitchpart)
 LOG_ADD(LOG_FLOAT, yaw, &g_yawpart)
+
+LOG_ADD(LOG_FLOAT, thrust, &thrust)
+LOG_ADD(LOG_FLOAT, torquex, &torque.x)
+LOG_ADD(LOG_FLOAT, torquey, &torque.y)
+LOG_ADD(LOG_FLOAT, torquez, &torque.z)
 
 LOG_GROUP_STOP(motor)

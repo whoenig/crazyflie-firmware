@@ -229,7 +229,7 @@ void motorsSetRatio(uint32_t id, uint16_t ithrust)
 
       // desired thrust in grams
       float maxNewton = maxThrust / 1000.0f * 9.81f;
-      float thrustNewton = ((float)ithrust / 65536.0f) * maxNewton;
+      float thrustNewton = ((float)ithrust / 65535.0f) * maxNewton;
       float thrustGram = thrustNewton / 9.81f * 1000.0f;
       // normalized voltage
       float v = pmGetBatteryVoltage() / 4.2f;
