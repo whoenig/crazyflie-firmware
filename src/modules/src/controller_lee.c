@@ -135,6 +135,7 @@ void controllerLee(control_t *control, setpoint_t *setpoint,
   if (   setpoint->mode.x == modeAbs
       || setpoint->mode.y == modeAbs
       || setpoint->mode.z == modeAbs) {
+
     struct vec pos_d = mkvec(setpoint->position.x, setpoint->position.y, setpoint->position.z);
     struct vec vel_d = mkvec(setpoint->velocity.x, setpoint->velocity.y, setpoint->velocity.z);
     struct vec acc_d = mkvec(setpoint->acceleration.x, setpoint->acceleration.y, setpoint->acceleration.z + GRAVITY_MAGNITUDE);
@@ -177,13 +178,13 @@ void controllerLee(control_t *control, setpoint_t *setpoint,
       }
     }
     // On CF2, thrust is mapped 65536 <==> 4 * 12 grams
-    const float max_thrust = 4 * 12.0 / 1000.0 * 9.81; // N
-    control->thrustSI = setpoint->thrust / 65536.0f * max_thrust;
+    const float max_thrust = 70.0f / 1000.0f * 9.81f; // N
+    control->thrustSI = setpoint->thrust / UINT16_MAX * max_thrust;
 
     qr = mkvec(
       radians(setpoint->attitude.roll),
       -radians(setpoint->attitude.pitch), // This is in the legacy coordinate system where pitch is inverted
-      radians(desiredYaw));
+      desiredYaw);
   }
 
   // Attitude controller

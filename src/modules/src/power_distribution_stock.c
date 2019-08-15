@@ -57,6 +57,8 @@ static struct {
   uint16_t m4;
 } motorPowerSet;
 
+static float motorForce[4];
+
 // static float g_thrustpart;
 static float g_rollpart;
 static float g_pitchpart;
@@ -121,19 +123,21 @@ static void powerDistributionForceTorque(const control_t *control)
   thrust = control->thrustSI;
   torque = mkvec(control->torque[0], control->torque[1], control->torque[2]);
 
+  // torque.x = clamp(torque.x, -0.002, 0.002);
+  // torque.y = clamp(torque.y, -0.002, 0.002);
+  // torque.z = clamp(torque.z, -0.0005, 0.0005);
+
   // see https://github.com/jpreiss/libquadrotor/blob/master/src/quad_control.c
   const float thrust_to_torque = 0.006f;
   const float arm_length = 0.046f; // m
-  const float max_thrust = 12.0 / 1000.0 * 9.81; // N
   const float thrustpart = 0.25f * control->thrustSI; // N (per rotor)
-  const float yawpart = -0.25f * control->torque[2] / thrust_to_torque;
+  const float yawpart = -0.25f * torque.z / thrust_to_torque;
 
   float const arm = 0.707106781f * arm_length;
-  const float rollpart = 0.25f / arm * control->torque[0];
-  const float pitchpart = 0.25f / arm * control->torque[1];
+  const float rollpart = 0.25f / arm * torque.x;
+  const float pitchpart = 0.25f / arm * torque.y;
 
   // Thrust for each motor in N
-  float motorForce[4];
   saturationStatus = 0;
 
   // Simple thrust mixing
@@ -213,15 +217,46 @@ static void powerDistributionForceTorque(const control_t *control)
 #endif
   // for CF2, motorratio directly maps to thrust (not rpm etc.)
   // Thus, we only need to scale the values here
-  motorPower.m1 = limitThrust(motorForce[0] / max_thrust * UINT16_MAX);
-  motorPower.m2 = limitThrust(motorForce[1] / max_thrust * UINT16_MAX);
-  motorPower.m3 = limitThrust(motorForce[2] / max_thrust * UINT16_MAX);
-  motorPower.m4 = limitThrust(motorForce[3] / max_thrust * UINT16_MAX);
 
-  motorsSetRatio(MOTOR_M1, motorPower.m1);
-  motorsSetRatio(MOTOR_M2, motorPower.m2);
-  motorsSetRatio(MOTOR_M3, motorPower.m3);
-  motorsSetRatio(MOTOR_M4, motorPower.m4);
+  const float maxThrustInGram = motorsGetMaxThrust(); // g
+
+#if 0
+  const float maxThrust = maxThrustInGram * 9.81f / 1000.0f; // N
+
+  // yaw-torque saturation
+  // a) mix without yaw
+  motorForce[0] = thrustpart - rollpart - pitchpart;
+  motorForce[1] = thrustpart - rollpart + pitchpart;
+  motorForce[2] = thrustpart + rollpart + pitchpart;
+  motorForce[3] = thrustpart + rollpart - pitchpart;
+
+  // b) find maxYawPart
+  float maxYawPart = maxThrust - motorForce[0]; // positive yaw can be at most
+  float minYawPart = 0 - motorForce[0]; // negative yaw can be at most
+  maxYawPart = fmaxf(maxYawPart, motorForce[1]);
+  maxYawPart = fmaxf(maxYawPart, maxThrust - motorForce[2]);
+  maxYawPart = fmaxf(maxYawPart, motorForce[3]);
+  minYawPart = fminf(minYawPart, motorForce[1] - maxThrust);
+  minYawPart = fminf(minYawPart, 0 - motorForce[2]);
+  minYawPart = fminf(minYawPart, motorForce[3] - maxThrust);
+
+  float clamped_yawpart = 0;
+  if (minYawPart < maxYawPart) {
+    clamped_yawpart = clamp(yawpart, minYawPart, maxYawPart);
+  }
+
+  // c) re-mix
+  motorForce[0] = thrustpart - rollpart - pitchpart + clamped_yawpart;
+  motorForce[1] = thrustpart - rollpart + pitchpart - clamped_yawpart;
+  motorForce[2] = thrustpart + rollpart + pitchpart + clamped_yawpart;
+  motorForce[3] = thrustpart + rollpart - pitchpart - clamped_yawpart;
+
+  // collective-thrust saturation: skip for now
+#endif
+  for (int i = 0; i < 4; ++i) {
+    float forceInGrams = clamp(motorForce[i] / 9.81f * 1000.0f, 0, maxThrustInGram);
+    motorsSetThrust(i, forceInGrams);
+  }
 }
 
 void powerDistribution(const control_t *control)
@@ -271,5 +306,10 @@ LOG_ADD(LOG_FLOAT, thrust, &thrust)
 LOG_ADD(LOG_FLOAT, torquex, &torque.x)
 LOG_ADD(LOG_FLOAT, torquey, &torque.y)
 LOG_ADD(LOG_FLOAT, torquez, &torque.z)
+
+LOG_ADD(LOG_FLOAT, f1, &motorForce[0])
+LOG_ADD(LOG_FLOAT, f2, &motorForce[1])
+LOG_ADD(LOG_FLOAT, f3, &motorForce[2])
+LOG_ADD(LOG_FLOAT, f4, &motorForce[3])
 
 LOG_GROUP_STOP(motor)

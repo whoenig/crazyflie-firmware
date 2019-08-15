@@ -40,14 +40,20 @@
 //Logging includes
 #include "log.h"
 #include "param.h"
+#include "math3d.h"
 
-// Data for CF20
-static float d00 = 0.1464;
-static float d10 = 0.1991;
-static float d01 = -0.1288;
-static float d20 = -0.004736;
-static float d11 = -0.09409;
-static float maxThrust = 12.0;//g
+// Data for CF14
+static float d00 = 0.5543364748044269;
+static float d10 = 0.11442589787133063;
+static float d01 = -0.5067031467944692;
+static float d20 = -0.002283966554392003;
+static float d11 = -0.03255320005438393;
+
+static float e00 = -10.291152501242268;
+static float e10 = 3.926415845326646;
+static float e01 = 26.077196474667165;
+
+static float maxThrust;
 
 static uint16_t motorsBLConvBitsTo16(uint16_t bits);
 static uint16_t motorsBLConv16ToBits(uint16_t bits);
@@ -227,17 +233,21 @@ void motorsSetRatio(uint32_t id, uint16_t ithrust)
       // ratio = percentage * UINT16_MAX;
       // motor_ratios[id] = ratio;
 
-      // desired thrust in grams
-      float maxNewton = maxThrust / 1000.0f * 9.81f;
-      float thrustNewton = ((float)ithrust / 65535.0f) * maxNewton;
-      float thrustGram = thrustNewton / 9.81f * 1000.0f;
-      // normalized voltage
-      float v = pmGetBatteryVoltage() / 4.2f;
-      // normalized pwm:
-      float pwm = d00 + d10 * thrustGram + d01 * v + d20 * thrustGram * thrustGram + d11 * thrustGram * v;
+      if (ithrust > 0) {
+        // desired thrust in grams
+        float maxNewton = maxThrust / 1000.0f * 9.81f;
+        float thrustNewton = ((float)ithrust / 65535.0f) * maxNewton;
+        float thrustGram = thrustNewton / 9.81f * 1000.0f;
+        // normalized voltage
+        float v = pmGetBatteryVoltage() / 4.2f;
+        // normalized pwm:
+        float pwm = d00 + d10 * thrustGram + d01 * v + d20 * thrustGram * thrustGram + d11 * thrustGram * v;
 
-      ratio = pwm * UINT16_MAX;
-      motor_ratios[id] = ratio;
+        ratio = pwm * UINT16_MAX;
+        motor_ratios[id] = ratio;
+      } else {
+        motor_ratios[id] = 0;
+      }
     }
   #endif
     if (motorMap[id]->drvType == BRUSHLESS)
@@ -248,6 +258,40 @@ void motorsSetRatio(uint32_t id, uint16_t ithrust)
     {
       motorMap[id]->setCompare(motorMap[id]->tim, motorsConv16ToBits(ratio));
     }
+  }
+}
+
+// computes maximum thrust in grams given the current battery state
+float motorsGetMaxThrust()
+{
+  // normalized voltage
+  float v = pmGetBatteryVoltage() / 4.2f;
+  // normalized pwm
+  float pwm = (motor_ratios[0] + motor_ratios[1] + motor_ratios[2] + motor_ratios[3]) / 4.0f / UINT16_MAX;
+
+  maxThrust = clamp(e00 + e10 * pwm + e01 * v, 8, 16);
+
+  return maxThrust;
+}
+
+// set thrust for motor (in grams)
+void motorsSetThrust(uint32_t id, float thrustGram)
+{
+  if (motorMap[id]->drvType == BRUSHED)
+  {
+    if (thrustGram > 0) {
+      // normalized voltage
+      float v = pmGetBatteryVoltage() / 4.2f;
+      // normalized pwm:
+      float pwm = d00 + d10 * thrustGram + d01 * v + d20 * thrustGram * thrustGram + d11 * thrustGram * v;
+
+      motor_ratios[id] = pwm * UINT16_MAX;
+    } else {
+      motor_ratios[id] = 0;
+    }
+    motorMap[id]->setCompare(motorMap[id]->tim, motorsConv16ToBits(motor_ratios[id]));
+  } else {
+    ASSERT(false);
   }
 }
 
@@ -326,6 +370,8 @@ LOG_ADD(LOG_UINT32, m1_pwm, &motor_ratios[0])
 LOG_ADD(LOG_UINT32, m2_pwm, &motor_ratios[1])
 LOG_ADD(LOG_UINT32, m3_pwm, &motor_ratios[2])
 LOG_ADD(LOG_UINT32, m4_pwm, &motor_ratios[3])
+
+LOG_ADD(LOG_FLOAT, maxThrust, &maxThrust)
 LOG_GROUP_STOP(pwm)
 
 PARAM_GROUP_START(pwm)
@@ -334,5 +380,8 @@ PARAM_ADD(PARAM_FLOAT, d10, &d10)
 PARAM_ADD(PARAM_FLOAT, d01, &d01)
 PARAM_ADD(PARAM_FLOAT, d20, &d20)
 PARAM_ADD(PARAM_FLOAT, d11, &d11)
-PARAM_ADD(PARAM_FLOAT, maxThrust, &maxThrust)
+
+PARAM_ADD(PARAM_FLOAT, e00, &e00)
+PARAM_ADD(PARAM_FLOAT, e10, &e10)
+PARAM_ADD(PARAM_FLOAT, e01, &e01)
 PARAM_GROUP_STOP(pwm)
