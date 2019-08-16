@@ -43,12 +43,7 @@ enum saturationBits
   SaturationYaw          = 4,
 };
 
-static struct {
-  uint16_t m1;
-  uint16_t m2;
-  uint16_t m3;
-  uint16_t m4;
-} motorPower;
+struct motorPower_s motorPower;
 
 static struct {
   uint16_t m1;

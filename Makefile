@@ -40,7 +40,7 @@ CONTROLLER         ?= Any # one of Any, PID, Mellinger
 POWER_DISTRIBUTION ?= stock
 
 #OpenOCD conf
-RTOS_DEBUG        ?= 0
+RTOS_DEBUG        ?= 0ff
 
 LIB = src/lib
 FREERTOS = src/lib/FreeRTOS
@@ -196,6 +196,8 @@ PROJ_OBJ += oa.o
 PROJ_OBJ += multiranger.o
 PROJ_OBJ += lighthouse.o
 PROJ_OBJ += irled.o
+PROJ_OBJ += network.o
+
 
 ifeq ($(LPS_TDOA_ENABLE), 1)
 CFLAGS += -DLPS_TDOA_ENABLE
@@ -278,7 +280,7 @@ ifeq ($(DEBUG), 1)
   CFLAGS += -Wconversion
 else
 	# Fail on warnings
-  CFLAGS += -Os -g3 -Werror
+  CFLAGS += -Os -g3 #-Werror
 endif
 
 ifeq ($(LTO), 1)

@@ -50,9 +50,14 @@ Notes:
 #include "log.h"
 #include "math3d.h"
 #include "controller_sjc.h"
+#include "network.h"
+#include "usec_time.h"
 // #include "debug.h"
+#include "power_distribution.h"
 
 #define GRAVITY_MAGNITUDE (9.81f)
+
+static uint32_t ticks;
 
 static float g_vehicleMass = 0.033; // TODO: should be CF global for other modules
 
@@ -98,6 +103,12 @@ static struct vec omega_r;
 static struct vec qrp;
 static struct vec qr_dot;
 
+static struct vec Fa;
+
+static uint8_t enableNN = true;
+
+// TODO: Hacky
+extern struct motorPower_s motorPower;
 
 static inline struct vec vclampscl(struct vec value, float min, float max) {
   return mkvec(
@@ -132,6 +143,8 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
                                          const state_t *state,
                                          const uint32_t tick)
 {
+  net_outputs control_n;
+  float input[12];
   if (!RATE_DO_EXECUTE(ATTITUDE_RATE, tick)) {
     return;
   }
@@ -174,6 +187,36 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
       veltmul(Kpos_D, vel_e),
       veltmul(Kpos_P, pos_e),
       veltmul(Kpos_I, i_error_pos)));
+
+    if (enableNN) {
+      // Compute Fa
+      uint64_t startTime = usecTimestamp();
+
+      // inputs:
+      // pos_z [m]
+      // vel [m/s]
+      // qua (x,y,z,w) 
+      // each motor thrust [normalized 0..1]
+      input[0] = state->position.z;
+      input[1] = state->velocity.x;
+      input[2] = state->velocity.y;
+      input[3] = state->velocity.z;
+      input[4] = state->attitudeQuaternion.x;
+      input[5] = state->attitudeQuaternion.y;
+      input[6] = state->attitudeQuaternion.z;
+      input[7] = state->attitudeQuaternion.w;
+      input[8] = motorPower.m1 / 65535.0;
+      input[9] = motorPower.m2 / 65535.0;
+      input[10] = motorPower.m3 / 65535.0;
+      input[11] = motorPower.m4 / 65535.0;
+
+      network(&control_n, input);
+      Fa = mkvec(control_n.out_0, control_n.out_1, control_n.out_2);
+      ticks = usecTimestamp() - startTime;
+
+      // Apply Fa (convert Fa to N first)
+      F_d = vsub(F_d, vscl(9.81f / 1000.0f, Fa));
+    }
 
     control->thrustSI = vmag(F_d);
     // Reset the accumulated error while on the ground
@@ -328,6 +371,9 @@ PARAM_ADD(PARAM_FLOAT, Kpos_I_limit, &Kpos_I_limit)
 PARAM_ADD(PARAM_FLOAT, Jtune_x, &Jtune.x)
 PARAM_ADD(PARAM_FLOAT, Jtune_y, &Jtune.y)
 PARAM_ADD(PARAM_FLOAT, Jtune_z, &Jtune.z)
+
+PARAM_ADD(PARAM_UINT8, enableNN, &enableNN)
+
 PARAM_GROUP_STOP(ctrlSJC)
 
 LOG_GROUP_START(ctrlSJC)
@@ -367,5 +413,10 @@ LOG_ADD(LOG_FLOAT, qrpz, &qrp.z)
 
 LOG_ADD(LOG_FLOAT, qrdotz, &qr_dot.z)
 
+LOG_ADD(LOG_UINT32, ticks, &ticks)
+
+LOG_ADD(LOG_FLOAT, Fax, &Fa.x)
+LOG_ADD(LOG_FLOAT, Fay, &Fa.y)
+LOG_ADD(LOG_FLOAT, Faz, &Fa.z)
 
 LOG_GROUP_STOP(ctrlSJC)
