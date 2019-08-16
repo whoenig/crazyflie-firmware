@@ -28,13 +28,6 @@
 
 #include "stabilizer_types.h"
 
-struct motorPower_s {
-  uint16_t m1;
-  uint16_t m2;
-  uint16_t m3;
-  uint16_t m4;
-};
-
 void powerDistributionInit(void);
 bool powerDistributionTest(void);
 void powerDistribution(const control_t *control);

@@ -45,6 +45,7 @@ TODO:
 #include "log.h"
 #include "math3d.h"
 #include "controller_lee.h"
+#include "network.h"
 #include "usec_time.h"
 
 #define GRAVITY_MAGNITUDE (9.81f)
@@ -80,6 +81,9 @@ static struct vec u;
 
 static uint32_t ticks;
 
+static struct vec Fa;
+
+static uint8_t enableNN = true;
 static inline struct vec vclampscl(struct vec value, float min, float max) {
   return mkvec(
     clamp(value.x, min, max),
@@ -107,6 +111,8 @@ void controllerLee(control_t *control, setpoint_t *setpoint,
                                          const state_t *state,
                                          const uint32_t tick)
 {
+  net_outputs control_n;
+  float input[12];
   if (!RATE_DO_EXECUTE(ATTITUDE_RATE, tick)) {
     return;
   }
@@ -152,6 +158,35 @@ void controllerLee(control_t *control, setpoint_t *setpoint,
       veltmul(Kpos_D, vel_e),
       veltmul(Kpos_P, pos_e),
       veltmul(Kpos_I, i_error_pos)));
+
+    if (enableNN) {
+      // Compute Fa
+      // inputs: x2 - x1, y2 - y1, z2 - z1
+      // valid range: -0.15 -- 0.15; -0.2 -- 0.2; 0.2 -- 0.7
+
+      // pos_z [m]
+      // vel [m/s]
+      // qua (x,y,z,w) 
+      // each motor thrust [normalized 0..1]
+      // input[0] = state->position.z;
+      // input[1] = state->velocity.x;
+      // input[2] = state->velocity.y;
+      // input[3] = state->velocity.z;
+      // input[4] = state->attitudeQuaternion.x;
+      // input[5] = state->attitudeQuaternion.y;
+      // input[6] = state->attitudeQuaternion.z;
+      // input[7] = state->attitudeQuaternion.w;
+      // input[8] = motorPower.m1 / 65535.0;
+      // input[9] = motorPower.m2 / 65535.0;
+      // input[10] = motorPower.m3 / 65535.0;
+      // input[11] = motorPower.m4 / 65535.0;
+
+      network(&control_n, input);
+      Fa = mkvec(control_n.out_0, control_n.out_1, control_n.out_2);
+
+    // Apply Fa (convert Fa to N first)
+      F_d = vsub(F_d, vscl(9.81f / 1000.0f, Fa));
+    }
 
     control->thrustSI = vmag(F_d);
     // Reset the accumulated error while on the ground
@@ -269,6 +304,7 @@ PARAM_ADD(PARAM_FLOAT, Kpos_Iy, &Kpos_I.y)
 PARAM_ADD(PARAM_FLOAT, Kpos_Iz, &Kpos_I.z)
 PARAM_ADD(PARAM_FLOAT, Kpos_I_limit, &Kpos_I_limit)
 
+PARAM_ADD(PARAM_UINT8, enableNN, &enableNN)
 PARAM_GROUP_STOP(ctrlLee)
 
 
@@ -304,4 +340,7 @@ LOG_ADD(LOG_FLOAT, omegarz, &omega_r.z)
 
 LOG_ADD(LOG_UINT32, ticks, &ticks)
 
+LOG_ADD(LOG_FLOAT, Fax, &Fa.x)
+LOG_ADD(LOG_FLOAT, Fay, &Fa.y)
+LOG_ADD(LOG_FLOAT, Faz, &Fa.z)
 LOG_GROUP_STOP(ctrlLee)
