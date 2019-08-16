@@ -269,7 +269,7 @@ float motorsGetMaxThrust()
   // normalized pwm
   float pwm = (motor_ratios[0] + motor_ratios[1] + motor_ratios[2] + motor_ratios[3]) / 4.0f / UINT16_MAX;
 
-  maxThrust = clamp(e00 + e10 * pwm + e01 * v, 8, 16);
+  maxThrust = clamp(e00 + e10 * pwm + e01 * v, 8, 25);
 
   return maxThrust;
 }

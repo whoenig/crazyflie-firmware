@@ -49,7 +49,7 @@ TODO:
 
 #define GRAVITY_MAGNITUDE (9.81f)
 
-static float g_vehicleMass = 0.033; // TODO: should be CF global for other modules
+static float g_vehicleMass = 0.031; // TODO: should be CF global for other modules
 
 // Inertia matrix (diagonal matrix), see
 // System Identification of the Crazyflie 2.0 Nano Quadrocopter
