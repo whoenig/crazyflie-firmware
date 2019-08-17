@@ -75,6 +75,7 @@ const uint32_t MOTORS[] = { MOTOR_M1, MOTOR_M2, MOTOR_M3, MOTOR_M4 };
 const uint16_t testsound[NBR_OF_MOTORS] = {A4, A5, F5, D5 };
 
 static bool isInit = false;
+static uint8_t enable = true;
 
 /* Private functions */
 
@@ -252,11 +253,15 @@ void motorsSetRatio(uint32_t id, uint16_t ithrust)
   #endif
     if (motorMap[id]->drvType == BRUSHLESS)
     {
-      motorMap[id]->setCompare(motorMap[id]->tim, motorsBLConv16ToBits(ratio));
+      if (enable) {
+        motorMap[id]->setCompare(motorMap[id]->tim, motorsBLConv16ToBits(ratio));
+      }
     }
     else
     {
-      motorMap[id]->setCompare(motorMap[id]->tim, motorsConv16ToBits(ratio));
+      if (enable) {
+        motorMap[id]->setCompare(motorMap[id]->tim, motorsConv16ToBits(ratio));
+      }
     }
   }
 }
@@ -289,7 +294,10 @@ void motorsSetThrust(uint32_t id, float thrustGram)
     } else {
       motor_ratios[id] = 0;
     }
-    motorMap[id]->setCompare(motorMap[id]->tim, motorsConv16ToBits(motor_ratios[id]));
+
+    if (enable) {
+      motorMap[id]->setCompare(motorMap[id]->tim, motorsConv16ToBits(motor_ratios[id]));
+    }
   } else {
     ASSERT(false);
   }
@@ -375,6 +383,8 @@ LOG_ADD(LOG_FLOAT, maxThrust, &maxThrust)
 LOG_GROUP_STOP(pwm)
 
 PARAM_GROUP_START(pwm)
+PARAM_ADD(PARAM_UINT8, enable, &enable)
+
 PARAM_ADD(PARAM_FLOAT, d00, &d00)
 PARAM_ADD(PARAM_FLOAT, d10, &d10)
 PARAM_ADD(PARAM_FLOAT, d01, &d01)

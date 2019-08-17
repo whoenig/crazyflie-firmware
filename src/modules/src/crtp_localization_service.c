@@ -108,6 +108,11 @@ static struct {
 
 static uint32_t time;
 
+// Keeping track of neighbors
+static float alpha = 0.8;
+static float max_v = 0.5; // m/s
+struct allCfState all_states[MAX_CF_ID];
+
 static void locSrvCrtpCB(CRTPPacket* pk);
 static void extPositionHandler(CRTPPacket* pk);
 static void genericLocHandle(CRTPPacket* pk);
@@ -121,6 +126,8 @@ void locSrvInit()
 
   uint64_t address = configblockGetRadioAddress();
   my_id = address & 0xFF;
+
+  memset(all_states, 0, sizeof(all_states));
 
   crtpRegisterPortCB(CRTP_PORT_LOCALIZATION, locSrvCrtpCB);
   isInit = true;
@@ -222,7 +229,23 @@ static void genericLocHandle(CRTPPacket* pk)
         stateCompressed.quat = item->quat;
         time = xTaskGetTickCount();
         stateCompressed.time = time;
-        break;
+      }
+      if (item->id < MAX_CF_ID)
+      {
+        struct vec pos = vdiv(mkvec(item->x, item->y, item->z), 1000.0f);
+        uint64_t lastTime = all_states[item->id].timestamp;
+        if (lastTime != 0) {
+          float dt = (xTaskGetTickCount() - lastTime) / 1000.0f;
+          if (dt > 0) {
+            struct vec vel = vdiv(vsub(pos, all_states[item->id].pos), dt);
+
+            vel = vclampabs(vel, vrepeat(max_v));
+            all_states[item->id].vel = vadd(vscl(alpha, vel), vscl(1-alpha, all_states[item->id].vel));
+            // all_states[item->id].vel = vel;
+          }
+        }
+        all_states[item->id].pos = pos;
+        all_states[item->id].timestamp = xTaskGetTickCount();
       }
     }
   }
@@ -246,8 +269,23 @@ static void extPositionPackedHandler(CRTPPacket* pk)
       stateCompressed.quat = 0;
       time = xTaskGetTickCount();
       stateCompressed.time = time;
+    }
+    if (item->id < MAX_CF_ID)
+    {
+      struct vec pos = vdiv(mkvec(item->x, item->y, item->z), 1000.0f);
+      uint64_t lastTime = all_states[item->id].timestamp;
+      if (lastTime != 0) {
+        float dt = (xTaskGetTickCount() - lastTime) / 1000.0f;
+        if (dt > 0) {
+          struct vec vel = vdiv(vsub(pos, all_states[item->id].pos), dt);
 
-      break;
+          vel = vclampabs(vel, vrepeat(max_v));
+          all_states[item->id].vel = vadd(vscl(alpha, vel), vscl(1-alpha, all_states[item->id].vel));
+          // all_states[item->id].vel = vel;
+        }
+      }
+      all_states[item->id].pos = pos;
+      all_states[item->id].timestamp = xTaskGetTickCount();
     }
   }
 }
@@ -312,4 +350,7 @@ PARAM_GROUP_START(locSrv)
   PARAM_ADD(PARAM_UINT8, enRangeStreamFP32, &enableRangeStreamFloat)
   PARAM_ADD(PARAM_FLOAT, extPosStdDev, &extPosStdDev)
   PARAM_ADD(PARAM_FLOAT, extQuatStdDev, &extQuatStdDev)
+  
+  PARAM_ADD(PARAM_FLOAT, alpha, &alpha)
+  PARAM_ADD(PARAM_FLOAT, max_v, &max_v)
 PARAM_GROUP_STOP(locSrv)

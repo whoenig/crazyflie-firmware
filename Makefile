@@ -196,7 +196,7 @@ PROJ_OBJ += oa.o
 PROJ_OBJ += multiranger.o
 PROJ_OBJ += lighthouse.o
 PROJ_OBJ += irled.o
-PROJ_OBJ += network.o
+PROJ_OBJ += dim3_sn_2.o
 
 
 ifeq ($(LPS_TDOA_ENABLE), 1)

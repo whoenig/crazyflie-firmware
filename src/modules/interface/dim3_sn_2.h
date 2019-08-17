@@ -2,14 +2,12 @@
  * FILE: generated.h
  */
 
-#ifndef __NETWORK_H__
-#define __NETWORK_H__
+#ifndef __DIM3_SN_2_H__
+#define __DIM3_SN_2_H__
 
 /* Output */
 typedef struct net_outputs {
 	float out_0;
-	float out_1;
-	float out_2;
 } net_outputs;
 
 /* The network */

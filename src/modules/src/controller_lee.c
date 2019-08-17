@@ -45,12 +45,17 @@ TODO:
 #include "log.h"
 #include "math3d.h"
 #include "controller_lee.h"
-#include "network.h"
+#include "dim3_sn_2.h"
 #include "usec_time.h"
+#include "crtp_localization_service.h"
+#include "configblock.h"
+
+#include "FreeRTOS.h"
+#include "task.h"
 
 #define GRAVITY_MAGNITUDE (9.81f)
 
-static float g_vehicleMass = 0.031; // TODO: should be CF global for other modules
+static float g_vehicleMass = 0.033; // TODO: should be CF global for other modules
 
 // Inertia matrix (diagonal matrix), see
 // System Identification of the Crazyflie 2.0 Nano Quadrocopter
@@ -82,8 +87,9 @@ static struct vec u;
 static uint32_t ticks;
 
 static struct vec Fa;
-
 static uint8_t enableNN = true;
+static uint8_t my_id;
+
 static inline struct vec vclampscl(struct vec value, float min, float max) {
   return mkvec(
     clamp(value.x, min, max),
@@ -99,6 +105,9 @@ void controllerLeeReset(void)
 void controllerLeeInit(void)
 {
   controllerLeeReset();
+
+  uint64_t address = configblockGetRadioAddress();
+  my_id = address & 0xFF;
 }
 
 bool controllerLeeTest(void)
@@ -112,7 +121,7 @@ void controllerLee(control_t *control, setpoint_t *setpoint,
                                          const uint32_t tick)
 {
   net_outputs control_n;
-  float input[12];
+  float input[3];
   if (!RATE_DO_EXECUTE(ATTITUDE_RATE, tick)) {
     return;
   }
@@ -159,33 +168,35 @@ void controllerLee(control_t *control, setpoint_t *setpoint,
       veltmul(Kpos_P, pos_e),
       veltmul(Kpos_I, i_error_pos)));
 
-    if (enableNN) {
+    if (enableNN > 0) {
       // Compute Fa
       // inputs: x2 - x1, y2 - y1, z2 - z1
       // valid range: -0.15 -- 0.15; -0.2 -- 0.2; 0.2 -- 0.7
 
-      // pos_z [m]
-      // vel [m/s]
-      // qua (x,y,z,w) 
-      // each motor thrust [normalized 0..1]
-      // input[0] = state->position.z;
-      // input[1] = state->velocity.x;
-      // input[2] = state->velocity.y;
-      // input[3] = state->velocity.z;
-      // input[4] = state->attitudeQuaternion.x;
-      // input[5] = state->attitudeQuaternion.y;
-      // input[6] = state->attitudeQuaternion.z;
-      // input[7] = state->attitudeQuaternion.w;
-      // input[8] = motorPower.m1 / 65535.0;
-      // input[9] = motorPower.m2 / 65535.0;
-      // input[10] = motorPower.m3 / 65535.0;
-      // input[11] = motorPower.m4 / 65535.0;
+      for (int id = 0; id < MAX_CF_ID; ++id) {
 
-      network(&control_n, input);
-      Fa = mkvec(control_n.out_0, control_n.out_1, control_n.out_2);
+        // ignore myself and agents that have not received an update for 500ms
+        if (id != my_id
+            && xTaskGetTickCount() - all_states[id].timestamp < 500) {
 
-    // Apply Fa (convert Fa to N first)
-      F_d = vsub(F_d, vscl(9.81f / 1000.0f, Fa));
+          struct vec dpos = vsub(all_states[id].pos, all_states[my_id].pos);
+          if (fabsf(dpos.x) <= 0.15f && fabsf(dpos.y) <= 0.2f && dpos.z >= 0.2f && dpos.z <= 0.7f) {
+            input[0] = dpos.x;
+            input[1] = dpos.y;
+            input[2] = dpos.z;
+
+            network(&control_n, input);
+            Fa = mkvec(0, 0, control_n.out_0);
+
+            break;
+          }
+        }
+      }
+
+      if (enableNN > 1) {
+        // Apply Fa (convert Fa to N first)
+        F_d = vsub(F_d, vscl(9.81f / 1000.0f, Fa));
+      }
     }
 
     control->thrustSI = vmag(F_d);

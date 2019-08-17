@@ -27,6 +27,7 @@
 #define _CRTP_LOCALIZATION_SERVICE_H_
 
 #include "stabilizer_types.h"
+#include "math3d.h"
 
 /**
  * CRTP external position data struct
@@ -67,5 +68,14 @@ void locSrvInit(void);
 
 // Send range in float. After 5 ranges it will send the packet.
 void locSrvSendRangeFloat(uint8_t id, float range);
+
+#define MAX_CF_ID 30
+struct allCfState
+{
+  struct vec pos; // position in m
+  struct vec vel; // velocity in m/s
+  uint64_t timestamp; // timestamp in ticks of data
+};
+extern struct allCfState all_states[MAX_CF_ID];
 
 #endif /* _CRTP_LOCALIZATION_SERVICE_H_ */
