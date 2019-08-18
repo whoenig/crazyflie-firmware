@@ -1,10 +1,8 @@
 ---
 title: Folder description
-layout: page
-page_id: /topics/folder_description
+page_id: folder_description
 ---
 
-## Folder description:
 ```
 ./              | Root, contains the Makefile
  + init         | Contains the main.c

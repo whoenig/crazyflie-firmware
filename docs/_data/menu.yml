@@ -1,23 +1,25 @@
-docs_list_title: Index
-docs:
-
-- title: Main page
-  url: /crazyflie-firmware/
-
-- title: Crazyflie 1.0 support
-  url: /crazyflie-firmware/crazyflie_1_support
-
-- title: Build instructions
-  url: /crazyflie-firmware/build_instructions
-
-- title: Folder description
-  url: /crazyflie-firmware/folder_description
-
-- title: Unit Testing
-  url: /crazyflie-firmware/unit_testing
-
-
-
-
-
-
+- page_id: home
+- title: Introduction
+  subs:
+    - {page_id: folder_description}
+    - {page_id: crazyflie-1-support}
+- title: Building and Flashing
+  subs:
+    - {page_id: build_instructions}
+    - {page_id: dfu}
+- title: Userguides
+  subs:
+    - {page_id: deck}
+    - {page_id: logparam}
+- title: Explanation Functionalities
+  subs:
+    - {page_id: sensor_to_control}
+    - {page_id: ctrp_index}
+    - {page_id: deck_memory_format}
+- title: Development Instructions
+  subs:
+    - {page_id: starting_development}
+    - {page_id: howto}
+    - {page_id: serial}
+    - {page_id: openocd_gdb_debugging}
+    - {page_id: unit_testing}

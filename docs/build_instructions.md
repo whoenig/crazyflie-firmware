@@ -1,15 +1,12 @@
 ---
-title: Build instructions
-layout: page
+title: Building Crazyflie 2.0 firmware
 page_id: build_instructions
 ---
 
-# Building Crazyflie 2.0 firmware
-
 ## Dependencies
 
-You'll need to use either the [Crazyflie VM](https://wiki.bitcraze.io/projects:virtualmachine:index),
-[the toolbelt](https://wiki.bitcraze.io/projects:dockerbuilderimage:index) or 
+You'll need to use either the [Crazyflie VM](https://github.com/bitcraze/bitcraze-vm),
+[the toolbelt](https://github.com/bitcraze/toolbelt) or 
 install some ARM toolchain.
 
 ### Install a toolchain
@@ -120,8 +117,6 @@ PLATFORM=CF2
 DEBUG=1
 CLOAD=0
 ```
-More information can be found on the 
-[Bitcraze wiki](http://wiki.bitcraze.se/projects:crazyflie2:index)
 
 # Make targets:
 ```
@@ -139,5 +134,5 @@ flash      : Flash .elf using OpenOCD
 halt       : Halt the target using OpenOCD
 reset      : Reset the target using OpenOCD
 openocd    : Launch OpenOCD
-
+```
 

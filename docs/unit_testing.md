@@ -1,11 +1,7 @@
 ---
-title: Unit Testing
-layout: page
+title: Unit testing
 page_id: unit_testing
 ---
-
-
-# Unit testing
 
 ## Dependencies
 
