@@ -45,7 +45,9 @@ TODO:
 #include "log.h"
 #include "math3d.h"
 #include "controller_lee.h"
-#include "dim3_sn_2.h"
+#include "dim6_sn_6.h"
+#include "tau_dim6_sn_1.h"
+
 #include "usec_time.h"
 #include "crtp_localization_service.h"
 #include "configblock.h"
@@ -87,6 +89,7 @@ static struct vec u;
 static uint32_t ticks;
 
 static struct vec Fa;
+static struct vec tau_a;
 static uint8_t enableNN = true;
 static uint8_t my_id;
 
@@ -100,6 +103,7 @@ static inline struct vec vclampscl(struct vec value, float min, float max) {
 void controllerLeeReset(void)
 {
   i_error_pos = vzero();
+  tau_a = vzero();
 }
 
 void controllerLeeInit(void)
@@ -121,7 +125,9 @@ void controllerLee(control_t *control, setpoint_t *setpoint,
                                          const uint32_t tick)
 {
   net_outputs control_n;
-  float input[3];
+  net_outputs2 control_n2;
+  float input[6];
+
   if (!RATE_DO_EXECUTE(ATTITUDE_RATE, tick)) {
     return;
   }
@@ -173,6 +179,11 @@ void controllerLee(control_t *control, setpoint_t *setpoint,
       // inputs: x2 - x1, y2 - y1, z2 - z1
       // valid range: -0.15 -- 0.15; -0.2 -- 0.2; 0.2 -- 0.7
 
+      Fa = vzero();
+      tau_a = vzero();
+
+      // find most important neighbor
+      float lowestZ = 10;
       for (int id = 0; id < MAX_CF_ID; ++id) {
 
         // ignore myself and agents that have not received an update for 500ms
@@ -180,17 +191,28 @@ void controllerLee(control_t *control, setpoint_t *setpoint,
             && xTaskGetTickCount() - all_states[id].timestamp < 500) {
 
           struct vec dpos = vsub(all_states[id].pos, all_states[my_id].pos);
-          if (fabsf(dpos.x) <= 0.15f && fabsf(dpos.y) <= 0.2f && dpos.z >= 0.2f && dpos.z <= 0.7f) {
-            input[0] = dpos.x;
-            input[1] = dpos.y;
-            input[2] = dpos.z;
+          if (fabsf(dpos.x) <= 0.2f && fabsf(dpos.y) <= 0.2f && dpos.z >= 0.0f && dpos.z <= 0.7f) {
+            if (dpos.z < lowestZ) {
+              lowestZ = dpos.z;
 
-            network(&control_n, input);
-            Fa = mkvec(0, 0, control_n.out_0);
-
-            break;
+              input[0] = dpos.x;
+              input[1] = dpos.y;
+              input[2] = dpos.z;
+              input[3] = state->attitude.roll / 10;
+              input[4] = state->attitude.pitch / 10;
+              input[5] = state->attitude.yaw / 10;
+            }
           }
         }
+      }
+
+      // if there was a neighbor, evaluate the NN to compuate Fa
+      if (lowestZ < 10) {
+        network(&control_n, input);
+        Fa = mkvec(control_n.out_0, control_n.out_1, control_n.out_2);
+
+        network2(&control_n2, input);
+        tau_a = vdiv(mkvec(control_n.out_0, control_n.out_1, control_n.out_2), 1000.0f);
       }
 
       if (enableNN > 1) {
@@ -276,6 +298,10 @@ void controllerLee(control_t *control, setpoint_t *setpoint,
     vneg( veltmul(J, vcross(omega, omega_r)))
     );
 
+  // if (enableNN > 1) {
+  //   u = vsub(u, tau_a);
+  // }
+
   control->controlMode = controlModeForceTorque;
   control->torque[0] = u.x;
   control->torque[1] = u.y;
@@ -354,4 +380,9 @@ LOG_ADD(LOG_UINT32, ticks, &ticks)
 LOG_ADD(LOG_FLOAT, Fax, &Fa.x)
 LOG_ADD(LOG_FLOAT, Fay, &Fa.y)
 LOG_ADD(LOG_FLOAT, Faz, &Fa.z)
+
+LOG_ADD(LOG_FLOAT, tauax, &tau_a.x)
+LOG_ADD(LOG_FLOAT, tauay, &tau_a.y)
+LOG_ADD(LOG_FLOAT, tauaz, &tau_a.z)
+
 LOG_GROUP_STOP(ctrlLee)
