@@ -45,8 +45,15 @@ TODO:
 #include "log.h"
 #include "math3d.h"
 #include "controller_lee.h"
-#include "dim6_sn_6.h"
-#include "tau_dim6_sn_1.h"
+
+#define THREE_AGENT_NN
+
+#ifdef THREE_AGENT_NN
+  #include "three_dim6_sn_1.h"
+#else
+  #include "dim6_sn_6.h"
+  #include "tau_dim6_sn_1.h"
+#endif
 
 #include "usec_time.h"
 #include "crtp_localization_service.h"
@@ -91,6 +98,17 @@ static uint32_t ticks;
 static struct vec Fa;
 static struct vec tau_a;
 static uint8_t enableNN = true;
+
+#ifdef THREE_AGENT_NN
+  static net_outputs nnOutput;
+  static float nnInput[6];
+#else
+  static net_outputs control_n;
+  static net_outputs2 control_n2;
+  static float input[6];
+#endif
+
+
 static uint8_t my_id;
 
 static inline struct vec vclampscl(struct vec value, float min, float max) {
@@ -124,9 +142,7 @@ void controllerLee(control_t *control, setpoint_t *setpoint,
                                          const state_t *state,
                                          const uint32_t tick)
 {
-  net_outputs control_n;
-  net_outputs2 control_n2;
-  float input[6];
+
 
   if (!RATE_DO_EXECUTE(ATTITUDE_RATE, tick)) {
     return;
@@ -182,6 +198,41 @@ void controllerLee(control_t *control, setpoint_t *setpoint,
       Fa = vzero();
       tau_a = vzero();
 
+      #ifdef THREE_AGENT_NN
+
+      nnInput[0] = 0.2;
+      nnInput[1] = 0.6;
+      nnInput[2] = 0.7;
+      nnInput[3] = 0.2;
+      nnInput[4] = 0.6;
+      nnInput[5] = 0.7;
+      int idx = 0;
+
+      for (int id = 0; id < MAX_CF_ID; ++id) {
+        // dx: 0.2, dy: 0.6, dz: 0---0.7
+
+        // ignore myself and agents that have not received an update for 500ms
+        if (id != my_id
+            && xTaskGetTickCount() - all_states[id].timestamp < 500) {
+
+          struct vec dpos = vsub(all_states[id].pos, all_states[my_id].pos);
+          if (fabsf(dpos.x) <= 0.2f && fabsf(dpos.y) <= 0.6f && dpos.z >= 0.0f && dpos.z <= 0.7f) {
+            nnInput[idx++] = dpos.x;
+            nnInput[idx++] = dpos.y;
+            nnInput[idx++] = dpos.z;
+
+            if (idx > 5) {
+              break;
+            }
+          }
+        }
+      }
+
+      if (idx > 0) {
+        network(&nnOutput, nnInput);
+        Fa = mkvec(0, 0, nnOutput.out_0);
+      }
+      #else
       // find most important neighbor
       float lowestZ = 10;
       for (int id = 0; id < MAX_CF_ID; ++id) {
@@ -214,6 +265,7 @@ void controllerLee(control_t *control, setpoint_t *setpoint,
         network2(&control_n2, input);
         tau_a = vdiv(mkvec(control_n.out_0, control_n.out_1, control_n.out_2), 1000.0f);
       }
+      #endif
 
       if (enableNN > 1) {
         // Apply Fa (convert Fa to N first)
