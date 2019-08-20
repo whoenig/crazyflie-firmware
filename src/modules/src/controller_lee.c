@@ -45,19 +45,9 @@ TODO:
 #include "log.h"
 #include "math3d.h"
 #include "controller_lee.h"
-
-#define THREE_AGENT_NN
-
-#ifdef THREE_AGENT_NN
-  #include "three_dim6_sn_1.h"
-#else
-  #include "dim6_sn_6.h"
-  #include "tau_dim6_sn_1.h"
-#endif
+#include "controller_compute_fa.h"
 
 #include "usec_time.h"
-#include "crtp_localization_service.h"
-#include "configblock.h"
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -95,22 +85,6 @@ static struct vec u;
 
 static uint32_t ticks;
 
-static struct vec Fa;
-static struct vec tau_a;
-static uint8_t enableNN = true;
-
-#ifdef THREE_AGENT_NN
-  static net_outputs nnOutput;
-  static float nnInput[6];
-#else
-  static net_outputs control_n;
-  static net_outputs2 control_n2;
-  static float input[6];
-#endif
-
-
-static uint8_t my_id;
-
 static inline struct vec vclampscl(struct vec value, float min, float max) {
   return mkvec(
     clamp(value.x, min, max),
@@ -121,15 +95,11 @@ static inline struct vec vclampscl(struct vec value, float min, float max) {
 void controllerLeeReset(void)
 {
   i_error_pos = vzero();
-  tau_a = vzero();
 }
 
 void controllerLeeInit(void)
 {
   controllerLeeReset();
-
-  uint64_t address = configblockGetRadioAddress();
-  my_id = address & 0xFF;
 }
 
 bool controllerLeeTest(void)
@@ -190,88 +160,7 @@ void controllerLee(control_t *control, setpoint_t *setpoint,
       veltmul(Kpos_P, pos_e),
       veltmul(Kpos_I, i_error_pos)));
 
-    if (enableNN > 0) {
-      // Compute Fa
-      // inputs: x2 - x1, y2 - y1, z2 - z1
-      // valid range: -0.15 -- 0.15; -0.2 -- 0.2; 0.2 -- 0.7
-
-      Fa = vzero();
-      tau_a = vzero();
-
-      #ifdef THREE_AGENT_NN
-
-      nnInput[0] = 0.2;
-      nnInput[1] = 0.6;
-      nnInput[2] = 0.7;
-      nnInput[3] = 0.2;
-      nnInput[4] = 0.6;
-      nnInput[5] = 0.7;
-      int idx = 0;
-
-      for (int id = 0; id < MAX_CF_ID; ++id) {
-        // dx: 0.2, dy: 0.6, dz: 0---0.7
-
-        // ignore myself and agents that have not received an update for 500ms
-        if (id != my_id
-            && xTaskGetTickCount() - all_states[id].timestamp < 500) {
-
-          struct vec dpos = vsub(all_states[id].pos, all_states[my_id].pos);
-          if (fabsf(dpos.x) <= 0.2f && fabsf(dpos.y) <= 0.6f && dpos.z >= 0.0f && dpos.z <= 0.7f) {
-            nnInput[idx++] = dpos.x;
-            nnInput[idx++] = dpos.y;
-            nnInput[idx++] = dpos.z;
-
-            if (idx > 5) {
-              break;
-            }
-          }
-        }
-      }
-
-      if (idx > 0) {
-        network(&nnOutput, nnInput);
-        Fa = mkvec(0, 0, nnOutput.out_0);
-      }
-      #else
-      // find most important neighbor
-      float lowestZ = 10;
-      for (int id = 0; id < MAX_CF_ID; ++id) {
-
-        // ignore myself and agents that have not received an update for 500ms
-        if (id != my_id
-            && xTaskGetTickCount() - all_states[id].timestamp < 500) {
-
-          struct vec dpos = vsub(all_states[id].pos, all_states[my_id].pos);
-          if (fabsf(dpos.x) <= 0.2f && fabsf(dpos.y) <= 0.2f && dpos.z >= 0.0f && dpos.z <= 0.7f) {
-            if (dpos.z < lowestZ) {
-              lowestZ = dpos.z;
-
-              input[0] = dpos.x;
-              input[1] = dpos.y;
-              input[2] = dpos.z;
-              input[3] = state->attitude.roll / 10;
-              input[4] = state->attitude.pitch / 10;
-              input[5] = state->attitude.yaw / 10;
-            }
-          }
-        }
-      }
-
-      // if there was a neighbor, evaluate the NN to compuate Fa
-      if (lowestZ < 10) {
-        network(&control_n, input);
-        Fa = mkvec(control_n.out_0, control_n.out_1, control_n.out_2);
-
-        network2(&control_n2, input);
-        tau_a = vdiv(mkvec(control_n.out_0, control_n.out_1, control_n.out_2), 1000.0f);
-      }
-      #endif
-
-      if (enableNN > 1) {
-        // Apply Fa (convert Fa to N first)
-        F_d = vsub(F_d, vscl(9.81f / 1000.0f, Fa));
-      }
-    }
+    controllerComputeFa(state, &F_d);
 
     control->thrustSI = vmag(F_d);
     // Reset the accumulated error while on the ground
@@ -392,8 +281,6 @@ PARAM_ADD(PARAM_FLOAT, Kpos_Ix, &Kpos_I.x)
 PARAM_ADD(PARAM_FLOAT, Kpos_Iy, &Kpos_I.y)
 PARAM_ADD(PARAM_FLOAT, Kpos_Iz, &Kpos_I.z)
 PARAM_ADD(PARAM_FLOAT, Kpos_I_limit, &Kpos_I_limit)
-
-PARAM_ADD(PARAM_UINT8, enableNN, &enableNN)
 PARAM_GROUP_STOP(ctrlLee)
 
 
@@ -428,13 +315,5 @@ LOG_ADD(LOG_FLOAT, omegary, &omega_r.y)
 LOG_ADD(LOG_FLOAT, omegarz, &omega_r.z)
 
 LOG_ADD(LOG_UINT32, ticks, &ticks)
-
-LOG_ADD(LOG_FLOAT, Fax, &Fa.x)
-LOG_ADD(LOG_FLOAT, Fay, &Fa.y)
-LOG_ADD(LOG_FLOAT, Faz, &Fa.z)
-
-LOG_ADD(LOG_FLOAT, tauax, &tau_a.x)
-LOG_ADD(LOG_FLOAT, tauay, &tau_a.y)
-LOG_ADD(LOG_FLOAT, tauaz, &tau_a.z)
 
 LOG_GROUP_STOP(ctrlLee)

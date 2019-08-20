@@ -9,6 +9,7 @@
 #include "controller_mellingerSI.h"
 #include "controller_lee.h"
 #include "controller_shi.h"
+#include "controller_compute_fa.h"
 
 
 #define DEFAULT_CONTROLLER ControllerTypeSJC
@@ -51,6 +52,7 @@ void controllerInit(ControllerType controller) {
     currentController = forcedController;
   }
 
+  controllerComputeFaInit();
   initController();
 
   DEBUG_PRINT("Using %s (%d) controller\n", controllerGetName(), currentController);

@@ -163,6 +163,7 @@ PROJ_OBJ += controller_sjc.o
 PROJ_OBJ += controller_mellingerSI.o
 PROJ_OBJ += controller_lee.o
 PROJ_OBJ += controller_shi.o
+PROJ_OBJ += controller_compute_fa.o
 
 # High-Level Commander
 PROJ_OBJ += crtp_commander_high_level.o planner.o pptraj.o
