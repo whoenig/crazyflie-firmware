@@ -54,6 +54,7 @@ such as: take-off, landing, polynomial trajectories.
 #include "planner.h"
 #include "log.h"
 #include "param.h"
+#include "configblock.h"
 
 // Local types
 enum TrajectoryLocation_e {
@@ -183,7 +184,10 @@ void crtpCommanderHighLevelInit(void)
     return;
   }
 
-  plan_init(&planner);
+  uint64_t address = configblockGetRadioAddress();
+  uint8_t my_id = address & 0xFF;
+
+  plan_init(&planner, my_id);
 
   //Start the trajectory task
   xTaskCreate(crtpCommanderHighLevelTask, CMD_HIGH_LEVEL_TASK_NAME,
@@ -211,7 +215,7 @@ void crtpCommanderHighLevelGetSetpoint(setpoint_t* setpoint, const state_t *stat
 {
   xSemaphoreTake(lockTraj, portMAX_DELAY);
   float t = usecTimestamp() / 1e6;
-  struct traj_eval ev = plan_current_goal(&planner, t);
+  struct traj_eval ev = plan_current_goal(&planner, t, xTaskGetTickCount());
   if (!is_traj_eval_valid(&ev)) {
     // programming error
     plan_stop(&planner);
@@ -345,7 +349,7 @@ int go_to(const struct data_go_to* data)
     struct vec hover_pos = mkvec(data->x, data->y, data->z);
     xSemaphoreTake(lockTraj, portMAX_DELAY);
     float t = usecTimestamp() / 1e6;
-    result = plan_go_to(&planner, data->relative, hover_pos, data->yaw, data->duration, t);
+    result = plan_go_to(&planner, data->relative, hover_pos, data->yaw, data->duration, t, xTaskGetTickCount());
     xSemaphoreGive(lockTraj);
   }
   return result;

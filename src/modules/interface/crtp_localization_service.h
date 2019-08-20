@@ -26,8 +26,11 @@
 #ifndef _CRTP_LOCALIZATION_SERVICE_H_
 #define _CRTP_LOCALIZATION_SERVICE_H_
 
-#include "stabilizer_types.h"
 #include "math3d.h"
+#include <stdint.h>
+
+#ifndef SWIG
+#include "stabilizer_types.h"
 
 /**
  * CRTP external position data struct
@@ -68,6 +71,7 @@ void locSrvInit(void);
 
 // Send range in float. After 5 ranges it will send the packet.
 void locSrvSendRangeFloat(uint8_t id, float range);
+#endif
 
 #define MAX_CF_ID 30
 struct allCfState

@@ -38,6 +38,7 @@ Header file for planning state machine
 
 #pragma once
 
+#include <stdint.h>
 #include "math3d.h"
 #include "pptraj.h"
 
@@ -56,10 +57,16 @@ struct planner
 
 	struct piecewise_traj planned_trajectory; // trajectory for on-board planning
 	struct poly4d pieces[1]; // the on-board planner requires a single piece, only
+
+	// artificial potential
+	uint8_t my_id;
+	struct vec apPos;
+	struct vec apVel;
+	float last_t;
 };
 
 // initialize the planner
-void plan_init(struct planner *p);
+void plan_init(struct planner *p, int my_id);
 
 // tell the planner to stop.
 // subsequently, plan_is_stopped(p) will return true,
@@ -72,7 +79,7 @@ void plan_stop(struct planner *p);
 bool plan_is_stopped(struct planner *p);
 
 // get the planner's current goal.
-struct traj_eval plan_current_goal(struct planner *p, float t);
+struct traj_eval plan_current_goal(struct planner *p, float t, uint64_t ticks);
 
 // start a takeoff trajectory.
 int plan_takeoff(struct planner *p, struct vec pos, float yaw, float height, float duration, float t);
@@ -81,7 +88,7 @@ int plan_takeoff(struct planner *p, struct vec pos, float yaw, float height, flo
 int plan_land(struct planner *p, struct vec pos, float yaw, float height, float duration, float t);
 
 // move to a given position, then hover there.
-int plan_go_to(struct planner *p, bool relative, struct vec hover_pos, float hover_yaw, float duration, float t);
+int plan_go_to(struct planner *p, bool relative, struct vec hover_pos, float hover_yaw, float duration, float t, uint64_t ticks);
 
 // start trajectory
 int plan_start_trajectory(struct planner *p, const struct piecewise_traj* trajectory, bool reversed);
