@@ -349,7 +349,7 @@ int go_to(const struct data_go_to* data)
     struct vec hover_pos = mkvec(data->x, data->y, data->z);
     xSemaphoreTake(lockTraj, portMAX_DELAY);
     float t = usecTimestamp() / 1e6;
-    result = plan_go_to(&planner, data->relative, hover_pos, data->yaw, data->duration, t, xTaskGetTickCount());
+    result = plan_go_to(&planner, data->relative, hover_pos, data->yaw, data->duration, t);
     xSemaphoreGive(lockTraj);
   }
   return result;

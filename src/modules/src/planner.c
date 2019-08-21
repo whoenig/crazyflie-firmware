@@ -42,15 +42,15 @@ implementation of planning state machine
 
 #ifndef SWIG
 #include "param.h"
-static uint8_t enableAP = 0;
 #endif
 
-static const float Ko = 0.2; // gain for obstacles (repulsive)
-static const float Kp = 8; // gain for goal (attractive)
-static const float Kd = 4;
-static const float Rsafe = 0.3;
-static const float max_a = 3.0;
-static const float max_v = 2.0;
+static uint8_t enableAP = 1;
+static float Ko = 0.1; // gain for obstacles (repulsive)
+static float Kp = 8; // gain for goal (attractive)
+static float Kd = 4;
+static float Rsafe = 0.4;
+static float max_a = 1.0;//1.0;
+static float max_v = 0.25;//25;
 
 static void plan_takeoff_or_landing(struct planner *p, struct vec pos, float yaw, float height, float duration)
 {
@@ -64,11 +64,9 @@ static void plan_takeoff_or_landing(struct planner *p, struct vec pos, float yaw
 
 static struct traj_eval artificial_potential(struct planner *p, struct traj_eval input, float t, uint64_t ticks)
 {
-  #ifndef SWIG
   if (!enableAP) {
     return input;
   }
-  #endif
 
   // attractive accelleration:
   struct vec a = vadd(vscl(Kp, vclampabs(vsub(input.pos, p->apPos), vrepeat(0.5))),
@@ -83,8 +81,8 @@ static struct traj_eval artificial_potential(struct planner *p, struct traj_eval
 
       struct vec dpos = vsub(all_states[id].pos, all_states[p->my_id].pos);
       float dist = vmag(dpos);
-      if (dist) {
-        a = vsub(a, vscl(powf(Ko / (dist * (dist - Rsafe)), 3), dpos));
+      if (dist < Rsafe) {
+        a = vsub(a, vscl(Ko / powf(dist, 3), dpos));
       }
     }
   }
@@ -159,6 +157,27 @@ struct traj_eval plan_current_goal(struct planner *p, float t, uint64_t ticks)
 	}
 }
 
+static struct traj_eval plan_current_goal_noAP(struct planner *p, float t)
+{
+	switch (p->state) {
+		case TRAJECTORY_STATE_LANDING:
+			if (piecewise_is_finished(p->trajectory, t)) {
+				p->state = TRAJECTORY_STATE_IDLE;
+			}
+			// intentional fall-thru
+		case TRAJECTORY_STATE_FLYING:
+			if (p->reversed) {
+				return piecewise_eval_reversed(p->trajectory, t);
+			}
+			else {
+				return piecewise_eval(p->trajectory, t);
+			}
+
+		default:
+			return traj_eval_invalid();
+	}
+}
+
 
 int plan_takeoff(struct planner *p, struct vec pos, float yaw, float height, float duration, float t)
 {
@@ -191,11 +210,11 @@ int plan_land(struct planner *p, struct vec pos, float yaw, float height, float 
 	return 0;
 }
 
-int plan_go_to(struct planner *p, bool relative, struct vec hover_pos, float hover_yaw, float duration, float t, uint64_t ticks)
+int plan_go_to(struct planner *p, bool relative, struct vec hover_pos, float hover_yaw, float duration, float t)
 {
 	// allow in any state, i.e., can also be used to take-off or land
 
-	struct traj_eval setpoint = plan_current_goal(p, t, ticks);
+	struct traj_eval setpoint = plan_current_goal_noAP(p, t);
 
 	if (relative) {
 		hover_pos = vadd(hover_pos, setpoint.pos);
@@ -225,7 +244,8 @@ int plan_start_trajectory( struct planner *p, const struct piecewise_traj* traje
 #ifndef SWIG
 
 PARAM_GROUP_START(planner)
-PARAM_ADD(PARAM_UINT8, enableAP, &enableAP)
+
+PARAM_ADD(PARAM_UINT8, enAP, &enableAP)
 
 PARAM_ADD(PARAM_FLOAT, Ko, &Ko)
 PARAM_ADD(PARAM_FLOAT, Kp, &Kp)
@@ -233,7 +253,6 @@ PARAM_ADD(PARAM_FLOAT, Kd, &Kd)
 PARAM_ADD(PARAM_FLOAT, Rsafe, &Rsafe)
 PARAM_ADD(PARAM_FLOAT, max_a, &max_a)
 PARAM_ADD(PARAM_FLOAT, max_v, &max_v)
-
 PARAM_GROUP_STOP(planner)
 
 #endif

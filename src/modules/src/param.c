@@ -332,16 +332,16 @@ static void paramWriteProcess()
     switch (params[id].type & PARAM_BYTES_MASK)
     {
     case PARAM_1BYTE:
-      *(uint8_t*)params[id].address = *(uint8_t*)valptr;
-      break;
+        memcpy(params[id].address, valptr, 1);
+        break;
       case PARAM_2BYTES:
-        *(uint16_t*)params[id].address = *(uint16_t*)valptr;
+        memcpy(params[id].address, valptr, 2);
         break;
     case PARAM_4BYTES:
-        *(uint32_t*)params[id].address = *(uint32_t*)valptr;
+        memcpy(params[id].address, valptr, 4);
         break;
     case PARAM_8BYTES:
-        *(uint64_t*)params[id].address = *(uint64_t*)valptr;
+        memcpy(params[id].address, valptr, 8);
         break;
     }
 
@@ -369,16 +369,16 @@ static void paramWriteProcess()
     switch (params[id].type & PARAM_BYTES_MASK)
     {
    	case PARAM_1BYTE:
-   		*(uint8_t*)params[id].address = *(uint8_t*)valptr;
+      memcpy(params[id].address, valptr, 1);
    		break;
       case PARAM_2BYTES:
-    	  *(uint16_t*)params[id].address = *(uint16_t*)valptr;
+        memcpy(params[id].address, valptr, 2);
         break;
    	case PARAM_4BYTES:
-        *(uint32_t*)params[id].address = *(uint32_t*)valptr;
+        memcpy(params[id].address, valptr, 4);
         break;
    	case PARAM_8BYTES:
-        *(uint64_t*)params[id].address = *(uint64_t*)valptr;
+        memcpy(params[id].address, valptr, 8);
         break;
     }
 
@@ -421,16 +421,16 @@ static char paramWriteByNameProcess(char* group, char* name, int type, void *val
   switch (params[ptr].type & PARAM_BYTES_MASK)
   {
  	case PARAM_1BYTE:
- 		*(uint8_t*)params[ptr].address = *(uint8_t*)valptr;
- 		break;
+      memcpy(params[ptr].address, valptr, 1);
+ 		  break;
     case PARAM_2BYTES:
-  	  *(uint16_t*)params[ptr].address = *(uint16_t*)valptr;
+      memcpy(params[ptr].address, valptr, 2);
       break;
  	case PARAM_4BYTES:
-      *(uint32_t*)params[ptr].address = *(uint32_t*)valptr;
+      memcpy(params[ptr].address, valptr, 4);
       break;
  	case PARAM_8BYTES:
-      *(uint64_t*)params[ptr].address = *(uint64_t*)valptr;
+      memcpy(params[ptr].address, valptr, 8);
       break;
   }
 

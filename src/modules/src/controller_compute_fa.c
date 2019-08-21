@@ -28,13 +28,13 @@ SOFTWARE.
 #include "log.h"
 #include "math3d.h"
 
-#define THREE_AGENT_NN
+// #define THREE_AGENT_NN
 
 #ifdef THREE_AGENT_NN
   #include "three_dim6_sn_1.h"
 #else
   #include "dim6_sn_6.h"
-  #include "tau_dim6_sn_1.h"
+  // #include "tau_dim6_sn_1.h"
 #endif
 
 #include "usec_time.h"
@@ -53,7 +53,7 @@ static uint8_t enableNN = 0;
   static float nnInput[6];
 #else
   static net_outputs control_n;
-  static net_outputs2 control_n2;
+  // static net_outputs2 control_n2;
   static float input[6];
 #endif
 
@@ -141,8 +141,8 @@ void controllerComputeFa(const state_t *state, struct vec* F_d)
       network(&control_n, input);
       Fa = mkvec(control_n.out_0, control_n.out_1, control_n.out_2);
 
-      network2(&control_n2, input);
-      tau_a = vdiv(mkvec(control_n.out_0, control_n.out_1, control_n.out_2), 1000.0f);
+      // network2(&control_n2, input);
+      // tau_a = vdiv(mkvec(control_n.out_0, control_n.out_1, control_n.out_2), 1000.0f);
     }
     #endif
 
