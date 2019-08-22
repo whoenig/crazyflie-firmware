@@ -52,17 +52,30 @@ static uint8_t my_id;
 // 2 neighbors: 1600us
 // 3 neighbors: 2100 us
 
+// private functions
+static void controllerComputeFaTask(void * prm);
+
 void controllerComputeFaInit(void)
 {
   uint64_t address = configblockGetRadioAddress();
   my_id = address & 0xFF;
+
+  //Start the Fa task
+  xTaskCreate(controllerComputeFaTask, COMPUTE_FA_TASK_NAME,
+              COMPUTE_FA_TASK_STACKSIZE, NULL, COMPUTE_FA_TASK_PRI, NULL);
 }
 
 void controllerComputeFa(const state_t *state, struct vec* F_d)
 {
-  uint64_t startTime = usecTimestamp();
+  if (enableNN > 1) {
+    // Apply Fa (convert Fa to N first)
+    *F_d = vsub(*F_d, vscl(9.81f / 1000.0f, Fa));
+  }
+}
 
-  Fa = vzero();
+static void recomputeFa(void)
+{
+  uint64_t startTime = usecTimestamp();
 
   if (enableNN > 0) {
 
@@ -74,6 +87,7 @@ void controllerComputeFa(const state_t *state, struct vec* F_d)
 
 #if 1
     // evaluate rho for each nearby neighbor
+    uint8_t numNeighbors = 0;
     for (int id = 0; id < MAX_CF_ID; ++id) {
 
       // ignore myself and agents that have not received an update for 500ms
@@ -81,7 +95,7 @@ void controllerComputeFa(const state_t *state, struct vec* F_d)
           && xTaskGetTickCount() - all_states[id].timestamp < 500) {
 
         struct vec dpos = vsub(all_states[id].pos, all_states[my_id].pos);
-        if (fabsf(dpos.x) <= 0.2f && fabsf(dpos.y) <= 0.2f && dpos.z >= 0.0f && dpos.z <= 0.7f) {
+        if (fabsf(dpos.x) <= 0.2f && fabsf(dpos.y) <= 0.5f && dpos.z >= 0.0f && dpos.z <= 0.7f) {
 
           // evaluate NN
           phiInput[0] = dpos.x;
@@ -93,6 +107,7 @@ void controllerComputeFa(const state_t *state, struct vec* F_d)
           for (int i = 0; i < 40; ++i) {
             phiSummedOutput[i] += phiOutput[i];
           }
+          ++numNeighbors;
         }
       }
     }
@@ -136,18 +151,28 @@ void controllerComputeFa(const state_t *state, struct vec* F_d)
 #endif
 
     // evaluate rho network
-    const float* rhoOutput = nn_rho_2(phiSummedOutput);
-    Fa = mkvec(0, 0, rhoOutput[0]);
-
-    if (enableNN > 1) {
-      // Apply Fa (convert Fa to N first)
-      *F_d = vsub(*F_d, vscl(9.81f / 1000.0f, Fa));
+    if (numNeighbors > 0) {
+      const float* rhoOutput = nn_rho_2(phiSummedOutput);
+      Fa = mkvec(0, 0, rhoOutput[0]);
+    } else {
+      Fa = vzero();
     }
+  } else {
+    Fa = vzero();
   }
 
   ticks = usecTimestamp() - startTime;
 }
 
+void controllerComputeFaTask(void * prm)
+{
+  uint32_t lastWakeTime = xTaskGetTickCount();
+  // execute at 100 Hz (which is roughly our position update)
+  while(1) {
+    recomputeFa();
+    vTaskDelayUntil(&lastWakeTime, F2T(100));
+  }
+}
 
 PARAM_GROUP_START(ctrlFa)
 PARAM_ADD(PARAM_UINT8, enableNN, &enableNN)
