@@ -23,19 +23,15 @@ SOFTWARE.
 */
 
 #include <math.h>
+#include <string.h>
 
 #include "param.h"
 #include "log.h"
 #include "math3d.h"
 
-// #define THREE_AGENT_NN
 
-#ifdef THREE_AGENT_NN
-  #include "three_dim6_sn_1.h"
-#else
-  #include "dim6_sn_6.h"
-  // #include "tau_dim6_sn_1.h"
-#endif
+#include "rho_2.h"
+#include "phi_2.h"
 
 #include "usec_time.h"
 #include "crtp_localization_service.h"
@@ -45,20 +41,16 @@ SOFTWARE.
 #include "task.h"
 
 static struct vec Fa;
-static struct vec tau_a;
+static uint32_t ticks;
 static uint8_t enableNN = 0;
 
-#ifdef THREE_AGENT_NN
-  static net_outputs nnOutput;
-  static float nnInput[6];
-#else
-  static net_outputs control_n;
-  // static net_outputs2 control_n2;
-  static float input[6];
-#endif
-
-
+static float phiInput[3];
+static float phiSummedOutput[40];
 static uint8_t my_id;
+
+// 1 neighbor: 1000us
+// 2 neighbors: 1600us
+// 3 neighbors: 2100 us
 
 void controllerComputeFaInit(void)
 {
@@ -68,52 +60,20 @@ void controllerComputeFaInit(void)
 
 void controllerComputeFa(const state_t *state, struct vec* F_d)
 {
-  // Compute Fa
-  // inputs: x2 - x1, y2 - y1, z2 - z1
-  // valid range: -0.15 -- 0.15; -0.2 -- 0.2; 0.2 -- 0.7
+  uint64_t startTime = usecTimestamp();
 
   Fa = vzero();
-  tau_a = vzero();
 
   if (enableNN > 0) {
 
-    #ifdef THREE_AGENT_NN
+    // For each agent in the neighborhood, evaluate the rho network and sum the result
+    // over all evaluations
 
-    nnInput[0] = 0.2;
-    nnInput[1] = 0.6;
-    nnInput[2] = 0.7;
-    nnInput[3] = 0.2;
-    nnInput[4] = 0.6;
-    nnInput[5] = 0.7;
-    int idx = 0;
+    // zero entries
+    memset(phiSummedOutput, 0, sizeof(phiSummedOutput));
 
-    for (int id = 0; id < MAX_CF_ID; ++id) {
-      // dx: 0.2, dy: 0.6, dz: 0---0.7
-
-      // ignore myself and agents that have not received an update for 500ms
-      if (id != my_id
-          && xTaskGetTickCount() - all_states[id].timestamp < 500) {
-
-        struct vec dpos = vsub(all_states[id].pos, all_states[my_id].pos);
-        if (fabsf(dpos.x) <= 0.2f && fabsf(dpos.y) <= 0.6f && dpos.z >= 0.0f && dpos.z <= 0.7f) {
-          nnInput[idx++] = dpos.x;
-          nnInput[idx++] = dpos.y;
-          nnInput[idx++] = dpos.z;
-
-          if (idx > 5) {
-            break;
-          }
-        }
-      }
-    }
-
-    if (idx > 0) {
-      network(&nnOutput, nnInput);
-      Fa = mkvec(0, 0, nnOutput.out_0);
-    }
-    #else
-    // find most important neighbor
-    float lowestZ = 10;
+#if 1
+    // evaluate rho for each nearby neighbor
     for (int id = 0; id < MAX_CF_ID; ++id) {
 
       // ignore myself and agents that have not received an update for 500ms
@@ -122,35 +82,70 @@ void controllerComputeFa(const state_t *state, struct vec* F_d)
 
         struct vec dpos = vsub(all_states[id].pos, all_states[my_id].pos);
         if (fabsf(dpos.x) <= 0.2f && fabsf(dpos.y) <= 0.2f && dpos.z >= 0.0f && dpos.z <= 0.7f) {
-          if (dpos.z < lowestZ) {
-            lowestZ = dpos.z;
 
-            input[0] = dpos.x;
-            input[1] = dpos.y;
-            input[2] = dpos.z;
-            input[3] = state->attitude.roll / 10;
-            input[4] = state->attitude.pitch / 10;
-            input[5] = state->attitude.yaw / 10;
+          // evaluate NN
+          phiInput[0] = dpos.x;
+          phiInput[1] = dpos.y;
+          phiInput[2] = dpos.z;
+          const float* phiOutput = nn_phi_2(phiInput);
+
+          // sum result
+          for (int i = 0; i < 40; ++i) {
+            phiSummedOutput[i] += phiOutput[i];
           }
         }
       }
     }
+#else
+{
+  // evaluate NN
+  phiInput[0] = 0;
+  phiInput[1] = -0.2;
+  phiInput[2] = 0.5;
+  const float* phiOutput = nn_phi_2(phiInput);
 
-    // if there was a neighbor, evaluate the NN to compuate Fa
-    if (lowestZ < 10) {
-      network(&control_n, input);
-      Fa = mkvec(control_n.out_0, control_n.out_1, control_n.out_2);
+  // sum result
+  for (int i = 0; i < 40; ++i) {
+    phiSummedOutput[i] += phiOutput[i];
+  }
+}
+{
+  // evaluate NN
+  phiInput[0] = 0;
+  phiInput[1] = 0;
+  phiInput[2] = 0.6;
+  const float* phiOutput = nn_phi_2(phiInput);
 
-      // network2(&control_n2, input);
-      // tau_a = vdiv(mkvec(control_n.out_0, control_n.out_1, control_n.out_2), 1000.0f);
-    }
-    #endif
+  // sum result
+  for (int i = 0; i < 40; ++i) {
+    phiSummedOutput[i] += phiOutput[i];
+  }
+}
+// {
+//   // evaluate NN
+//   phiInput[0] = 0;
+//   phiInput[1] = 0.2;
+//   phiInput[2] = 0.5;
+//   const float* phiOutput = nn_phi_2(phiInput);
+
+//   // sum result
+//   for (int i = 0; i < 40; ++i) {
+//     phiSummedOutput[i] += phiOutput[i];
+//   }
+// }
+#endif
+
+    // evaluate rho network
+    const float* rhoOutput = nn_rho_2(phiSummedOutput);
+    Fa = mkvec(0, 0, rhoOutput[0]);
 
     if (enableNN > 1) {
       // Apply Fa (convert Fa to N first)
       *F_d = vsub(*F_d, vscl(9.81f / 1000.0f, Fa));
     }
   }
+
+  ticks = usecTimestamp() - startTime;
 }
 
 
@@ -164,8 +159,6 @@ LOG_ADD(LOG_FLOAT, Fax, &Fa.x)
 LOG_ADD(LOG_FLOAT, Fay, &Fa.y)
 LOG_ADD(LOG_FLOAT, Faz, &Fa.z)
 
-LOG_ADD(LOG_FLOAT, tauax, &tau_a.x)
-LOG_ADD(LOG_FLOAT, tauay, &tau_a.y)
-LOG_ADD(LOG_FLOAT, tauaz, &tau_a.z)
+LOG_ADD(LOG_UINT32, ticks, &ticks)
 
 LOG_GROUP_STOP(ctrlFa)

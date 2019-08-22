@@ -200,9 +200,10 @@ PROJ_OBJ += oa.o
 PROJ_OBJ += multiranger.o
 PROJ_OBJ += lighthouse.o
 PROJ_OBJ += irled.o
-PROJ_OBJ += dim6_sn_6.o
-# PROJ_OBJ += tau_dim6_sn_1.o
-# PROJ_OBJ += three_dim6_sn_1.o
+
+# NN Swarm - Deepset
+PROJ_OBJ += phi_2.o
+PROJ_OBJ += rho_2.o
 
 
 ifeq ($(LPS_TDOA_ENABLE), 1)
