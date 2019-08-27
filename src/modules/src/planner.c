@@ -72,14 +72,17 @@ static struct traj_eval artificial_potential(struct planner *p, struct traj_eval
   struct vec a = vadd(vscl(Kp, vclampabs(vsub(input.pos, p->apPos), vrepeat(0.5))),
                       vscl(Kd, vclampabs(vsub(input.vel, p->apVel), vrepeat(0.5))));
 
-  for (int id = 0; id < MAX_CF_ID; ++id) {
+  struct allCfState* myState = locSrvGetState(p->my_id);
+  for (int id = MIN_CF_ID; id < MAX_CF_ID; ++id) {
     // dx: 0.2, dy: 0.6, dz: 0---0.7
+
+    struct allCfState* otherState = locSrvGetState(id);
 
     // ignore myself and agents that have not received an update for 500ms
     if (id != p->my_id
-        && ticks - all_states[id].timestamp < 500) {
+        && ticks - otherState->timestamp < 500) {
 
-      struct vec dpos = vsub(all_states[id].pos, all_states[p->my_id].pos);
+      struct vec dpos = vsub(otherState->pos, myState->pos);
       float dist = vmag(dpos);
       if (dist < Rsafe) {
         a = vsub(a, vscl(Ko / powf(dist, 3), dpos));

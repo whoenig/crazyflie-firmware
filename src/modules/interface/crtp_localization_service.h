@@ -73,13 +73,14 @@ void locSrvInit(void);
 void locSrvSendRangeFloat(uint8_t id, float range);
 #endif
 
-#define MAX_CF_ID 30
+#define MIN_CF_ID 200
+#define MAX_CF_ID 205
 struct allCfState
 {
   struct vec pos; // position in m
   struct vec vel; // velocity in m/s
   uint64_t timestamp; // timestamp in ticks of data
 };
-extern struct allCfState all_states[MAX_CF_ID];
+struct allCfState* locSrvGetState(uint8_t cfid);
 
 #endif /* _CRTP_LOCALIZATION_SERVICE_H_ */

@@ -111,7 +111,7 @@ static uint32_t time;
 // Keeping track of neighbors
 static float alpha = 0.8;
 static float max_v = 0.5; // m/s
-struct allCfState all_states[MAX_CF_ID];
+static struct allCfState all_states[MAX_CF_ID - MIN_CF_ID];
 
 static void locSrvCrtpCB(CRTPPacket* pk);
 static void extPositionHandler(CRTPPacket* pk);
@@ -230,22 +230,23 @@ static void genericLocHandle(CRTPPacket* pk)
         time = xTaskGetTickCount();
         stateCompressed.time = time;
       }
-      if (item->id < MAX_CF_ID)
+      struct allCfState* state = locSrvGetState(item->id);
+      if (state)
       {
         struct vec pos = vdiv(mkvec(item->x, item->y, item->z), 1000.0f);
-        uint64_t lastTime = all_states[item->id].timestamp;
+        uint64_t lastTime = state->timestamp;
         if (lastTime != 0) {
           float dt = (xTaskGetTickCount() - lastTime) / 1000.0f;
           if (dt > 0) {
-            struct vec vel = vdiv(vsub(pos, all_states[item->id].pos), dt);
+            struct vec vel = vdiv(vsub(pos, state->pos), dt);
 
             vel = vclampabs(vel, vrepeat(max_v));
-            all_states[item->id].vel = vadd(vscl(alpha, vel), vscl(1-alpha, all_states[item->id].vel));
-            // all_states[item->id].vel = vel;
+            state->vel = vadd(vscl(alpha, vel), vscl(1-alpha, state->vel));
+            // state->vel = vel;
           }
         }
-        all_states[item->id].pos = pos;
-        all_states[item->id].timestamp = xTaskGetTickCount();
+        state->pos = pos;
+        state->timestamp = xTaskGetTickCount();
       }
     }
   }
@@ -270,22 +271,23 @@ static void extPositionPackedHandler(CRTPPacket* pk)
       time = xTaskGetTickCount();
       stateCompressed.time = time;
     }
-    if (item->id < MAX_CF_ID)
+    struct allCfState* state = locSrvGetState(item->id);
+    if (state)
     {
       struct vec pos = vdiv(mkvec(item->x, item->y, item->z), 1000.0f);
-      uint64_t lastTime = all_states[item->id].timestamp;
+      uint64_t lastTime = state->timestamp;
       if (lastTime != 0) {
         float dt = (xTaskGetTickCount() - lastTime) / 1000.0f;
         if (dt > 0) {
-          struct vec vel = vdiv(vsub(pos, all_states[item->id].pos), dt);
+          struct vec vel = vdiv(vsub(pos, state->pos), dt);
 
           vel = vclampabs(vel, vrepeat(max_v));
-          all_states[item->id].vel = vadd(vscl(alpha, vel), vscl(1-alpha, all_states[item->id].vel));
-          // all_states[item->id].vel = vel;
+          state->vel = vadd(vscl(alpha, vel), vscl(1-alpha, state->vel));
+          // state->vel = vel;
         }
       }
-      all_states[item->id].pos = pos;
-      all_states[item->id].timestamp = xTaskGetTickCount();
+      state->pos = pos;
+      state->timestamp = xTaskGetTickCount();
     }
   }
 }
@@ -324,6 +326,14 @@ void locSrvSendRangeFloat(uint8_t id, float range)
       rangeIndex = 0;
     }
   }
+}
+
+struct allCfState* locSrvGetState(uint8_t cfid)
+{
+  if (cfid >= MIN_CF_ID && cfid < MAX_CF_ID) {
+    return &all_states[cfid - MIN_CF_ID];
+  }
+  return NULL;
 }
 
 LOG_GROUP_START(ext_pos)
