@@ -202,8 +202,10 @@ PROJ_OBJ += lighthouse.o
 PROJ_OBJ += irled.o
 
 # NN Swarm - Deepset
-PROJ_OBJ += phi_2.o
-PROJ_OBJ += rho_2.o
+# PROJ_OBJ += phi_2.o
+# PROJ_OBJ += rho_2.o
+PROJ_OBJ += phi_0827_2.o
+PROJ_OBJ += rho_0827_2.o
 
 
 ifeq ($(LPS_TDOA_ENABLE), 1)
