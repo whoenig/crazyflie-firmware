@@ -44,7 +44,7 @@ static struct vec Fa;
 static uint32_t ticks;
 static uint8_t enableNN = 0;
 
-static float phiInput[3];
+static float phiInput[6];
 static float phiSummedOutput[40];
 static uint8_t my_id;
 
@@ -105,10 +105,15 @@ static void recomputeFa(void)
         struct vec dpos = vsub(otherState->pos, lastPos);
         if (fabsf(dpos.x) <= 0.2f && fabsf(dpos.y) <= 0.5f && dpos.z >= 0.0f && dpos.z <= 0.7f) {
 
+          struct vec dvel = vsub(otherState->vel, myState->vel);
+   
           // evaluate NN
           phiInput[0] = dpos.x;
           phiInput[1] = dpos.y;
           phiInput[2] = dpos.z;
+          phiInput[3] = dvel.x;
+          phiInput[4] = dvel.y;
+          phiInput[5] = dvel.z;
           const float* phiOutput = nn_phi_2(phiInput);
 
           // sum result
