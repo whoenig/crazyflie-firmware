@@ -58,7 +58,7 @@ Notes:
 
 static uint32_t ticks;
 
-static float g_vehicleMass = 0.033; // TODO: should be CF global for other modules
+static float g_vehicleMass = 0.034; // TODO: should be CF global for other modules
 
 // Attitude P on omega
 static struct vec K = {0.0005, 0.0005, 0.001};
@@ -178,7 +178,10 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
       veltmul(Kpos_P, pos_e),
       veltmul(Kpos_I, i_error_pos)));
 
-    controllerComputeFa(state, &F_d);
+    // crazy hack!
+    if (pos_e.z > 0) {
+      controllerComputeFa(state, &F_d);
+    }
 
     control->thrustSI = vmag(F_d);
     // Reset the accumulated error while on the ground
@@ -333,6 +336,8 @@ PARAM_ADD(PARAM_FLOAT, Kpos_I_limit, &Kpos_I_limit)
 PARAM_ADD(PARAM_FLOAT, Jtune_x, &Jtune.x)
 PARAM_ADD(PARAM_FLOAT, Jtune_y, &Jtune.y)
 PARAM_ADD(PARAM_FLOAT, Jtune_z, &Jtune.z)
+
+PARAM_ADD(PARAM_FLOAT, mass, &g_vehicleMass)
 
 PARAM_GROUP_STOP(ctrlSJC)
 

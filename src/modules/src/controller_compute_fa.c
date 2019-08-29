@@ -48,6 +48,8 @@ static float phiInput[3];
 static float phiSummedOutput[40];
 static uint8_t my_id;
 
+static struct vec lastPos;
+
 // 1 neighbor: 1000us
 // 2 neighbors: 1600us
 // 3 neighbors: 2100 us
@@ -60,6 +62,8 @@ void controllerComputeFaInit(void)
   uint64_t address = configblockGetRadioAddress();
   my_id = address & 0xFF;
 
+  lastPos = vzero();
+
   //Start the Fa task
   xTaskCreate(controllerComputeFaTask, COMPUTE_FA_TASK_NAME,
               COMPUTE_FA_TASK_STACKSIZE, NULL, COMPUTE_FA_TASK_PRI, NULL);
@@ -68,6 +72,7 @@ void controllerComputeFaInit(void)
 void controllerComputeFa(const state_t *state, struct vec* F_d)
 {
   if (enableNN > 1) {
+    lastPos = mkvec(state->position.x, state->position.y, state->position.z);
     // Apply Fa (convert Fa to N first)
     *F_d = vsub(*F_d, vscl(9.81f / 1000.0f, Fa));
   }
@@ -88,7 +93,7 @@ static void recomputeFa(void)
 #if 1
     // evaluate rho for each nearby neighbor
     uint8_t numNeighbors = 0;
-    struct allCfState* myState = locSrvGetState(my_id);
+    // struct allCfState* myState = locSrvGetState(my_id);
     for (int id = MIN_CF_ID; id < MAX_CF_ID; ++id) {
 
       struct allCfState* otherState = locSrvGetState(id);
@@ -97,7 +102,7 @@ static void recomputeFa(void)
       if (id != my_id
           && xTaskGetTickCount() - otherState->timestamp < 500) {
 
-        struct vec dpos = vsub(otherState->pos, myState->pos);
+        struct vec dpos = vsub(otherState->pos, lastPos);
         if (fabsf(dpos.x) <= 0.2f && fabsf(dpos.y) <= 0.5f && dpos.z >= 0.0f && dpos.z <= 0.7f) {
 
           // evaluate NN
