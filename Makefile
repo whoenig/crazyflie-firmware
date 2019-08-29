@@ -206,9 +206,14 @@ PROJ_OBJ += irled.o
 # PROJ_OBJ += rho_2.o
 # PROJ_OBJ += phi_0827_2.o
 # PROJ_OBJ += rho_0827_2.o
-PROJ_OBJ += phi_0827_2_2.o
-PROJ_OBJ += rho_0827_2_2.o
+# PROJ_OBJ += phi_0827_2_2.o
+# PROJ_OBJ += rho_0827_2_2.o
 
+# PROJ_OBJ += phi_0828_2_2.o
+# PROJ_OBJ += rho_0828_2_2.o
+
+PROJ_OBJ += phi_0828_2_3.o
+PROJ_OBJ += rho_0828_2_3.o
 
 ifeq ($(LPS_TDOA_ENABLE), 1)
 CFLAGS += -DLPS_TDOA_ENABLE
