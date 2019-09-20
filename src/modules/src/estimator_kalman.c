@@ -156,7 +156,7 @@ static inline bool stateEstimatorHasHeightPacket(heightMeasurement_t *height) {
 /**
  * Tuning parameters
  */
-#define PREDICT_RATE RATE_100_HZ // this is slower than the IMU update rate of 500Hz
+#define PREDICT_RATE RATE_500_HZ // this is slower than the IMU update rate of 500Hz
 #define BARO_RATE RATE_25_HZ
 
 // the point at which the dynamics change from stationary to flying

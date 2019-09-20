@@ -87,6 +87,16 @@ void ekf_init(struct ekf *ekf, float const pos[3], float const vel[3], float con
 	ekf->quat = qloadf(quat);
 	//memcpy(ekf->P, ekf_cov_init, sizeof(ekf_cov_init));
 	eyeN(AS_1D(ekf->P), EKF_N);
+
+	ekf->P[0][0] = ekf->P[1][1] = ekf->P[2][2] = 0.02; // position
+	ekf->P[3][3] = ekf->P[4][4] = ekf->P[5][5] = 0.02; // velocity
+	ekf->P[6][6] = ekf->P[7][7] = ekf->P[8][8] = 0.005; // quat
+	for (int i = 0; i < EKF_N; ++i) {
+		for (int j = 0; j < EKF_N; ++j) {
+			ekf->P[i][j] += 1e-6f;
+		}
+	}
+
 	//initUsecTimer();
 }
 
