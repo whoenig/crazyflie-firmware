@@ -41,6 +41,9 @@ static float gyro_var_xyz = 0.2e-4;
 // but to keep the code simple for now we just average them
 static float acc_var_xyz = 2.4e-3;
 
+struct vec dbg_err_pos;
+struct vec dbg_cor_pos;
+
 // ------ utility functions for manipulating blocks of the EKF matrices ------
 
 static void set_K_block33(float m[EKF_N][EKF_N], int row, int col, struct mat33 const *block)
@@ -345,7 +348,9 @@ void ekf_pose(struct ekf const *old, struct ekf *new, float const pos_measured[3
 
 	// diag only, no cov
 	float const Rdiag[EKF_M] =
-		{ ext_var_xy, ext_var_xy, ext_var_xy };
+		{ ext_var_xy, ext_var_xy, ext_var_xy,
+		  0, 0, 0,
+		  ext_var_q, ext_var_q, ext_var_q };
 	static float R[EKF_M][EKF_M];
 	ZEROARR(R);
 	for (int i = 0; i < EKF_M; ++i) {
@@ -424,6 +429,7 @@ void ekf_position(struct ekf const *old, struct ekf *new, float const pos_measur
 	struct vec const p_measured = vloadf(pos_measured);
 
 	struct vec err_pos = vsub(p_measured, old->pos);
+	dbg_err_pos = err_pos;
 
 	float residual[EKF_M];
 	vstoref(err_pos, residual);
@@ -449,7 +455,9 @@ void ekf_position(struct ekf const *old, struct ekf *new, float const pos_measur
 
 	// diag only, no cov
 	float const Rdiag[EKF_M] =
-		{ ext_var_xy, ext_var_xy, ext_var_xy };
+		{ ext_var_xy, ext_var_xy, ext_var_xy,
+		  0, 0, 0,
+		  0, 0, 0 };
 	static float R[EKF_M][EKF_M];
 	ZEROARR(R);
 	for (int i = 0; i < EKF_M; ++i) {
@@ -483,6 +491,8 @@ void ekf_position(struct ekf const *old, struct ekf *new, float const pos_measur
 	static float correction[EKF_N];
 	ZEROARR(correction);
 	sgemm('n', 'n', EKF_N, 1, EKF_M, 1.0, AS_1D(K), residual, 0.0, correction);
+
+	dbg_cor_pos = vloadf(correction + 0);
 
 	new->pos = vadd(old->pos, vloadf(correction + 0));
 	new->vel = vadd(old->vel, vloadf(correction + 3));
@@ -528,7 +538,7 @@ void ekf_position_and_vel(struct ekf const *old, struct ekf *new, float const po
 	struct vec const p_measured = vloadf(pos_measured);
 	struct vec const v_measured = vloadf(vel_measured);
 
-	struct vec err_pos = vsub(p_measured, old->pos);
+	struct vec const err_pos = vsub(p_measured, old->pos);
 	struct vec const err_vel = vsub(v_measured, old->vel);
 
 	float residual[EKF_M];
@@ -541,6 +551,7 @@ void ekf_position_and_vel(struct ekf const *old, struct ekf *new, float const po
 	ZEROARR(H);
 	struct mat33 m_eye = meye();
 	set_H_block33(H, 0, 0, &m_eye);
+	set_H_block33(H, 3, 3, &m_eye);
 	usec_setup = toc();
 
 	tic();
@@ -636,6 +647,16 @@ PARAM_ADD(PARAM_FLOAT, ext_var_q, &ext_var_q)
 PARAM_ADD(PARAM_FLOAT, gyro_var_xyz, &gyro_var_xyz)
 PARAM_ADD(PARAM_FLOAT, acc_var_xyz, &acc_var_xyz)
 PARAM_GROUP_STOP(ekf)
+
+LOG_GROUP_START(ekf)
+LOG_ADD(LOG_FLOAT, ex, &dbg_err_pos.x)
+LOG_ADD(LOG_FLOAT, ey, &dbg_err_pos.y)
+LOG_ADD(LOG_FLOAT, ez, &dbg_err_pos.z)
+
+LOG_ADD(LOG_FLOAT, cx, &dbg_cor_pos.x)
+LOG_ADD(LOG_FLOAT, cy, &dbg_cor_pos.y)
+LOG_ADD(LOG_FLOAT, cz, &dbg_cor_pos.z)
+LOG_GROUP_STOP(ekf)
 
 LOG_GROUP_START(ekfprof)
 LOG_ADD(LOG_UINT32, usec_gain, &usec_gain)

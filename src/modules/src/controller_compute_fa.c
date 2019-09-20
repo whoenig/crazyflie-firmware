@@ -44,11 +44,18 @@ static struct vec Fa;
 static uint32_t ticks;
 static uint8_t enableNN = 0;
 
+static float scaleHack = 1.0f;
+
 static float phiInput[6];
 static float phiSummedOutput[40];
 static uint8_t my_id;
 
 static struct vec lastPos;
+static struct vec lastVel;
+
+#ifdef REALTIME_VERSION
+extern float motorForce[4];
+#endif
 
 // 1 neighbor: 1000us
 // 2 neighbors: 1600us
@@ -63,18 +70,43 @@ void controllerComputeFaInit(void)
   my_id = address & 0xFF;
 
   lastPos = vzero();
+  lastVel = vzero();
 
+  #ifndef REALTIME_VERSION
   //Start the Fa task
   xTaskCreate(controllerComputeFaTask, COMPUTE_FA_TASK_NAME,
               COMPUTE_FA_TASK_STACKSIZE, NULL, COMPUTE_FA_TASK_PRI, NULL);
+  #endif
 }
 
 void controllerComputeFa(const state_t *state, struct vec* F_d)
 {
-  if (enableNN > 1) {
+  if (enableNN > 0) {
     lastPos = mkvec(state->position.x, state->position.y, state->position.z);
-    // Apply Fa (convert Fa to N first)
-    *F_d = vsub(*F_d, vscl(9.81f / 1000.0f, Fa));
+    lastVel = mkvec(state->velocity.x, state->velocity.y, state->velocity.z);
+
+#ifdef REALTIME_VERSION
+    // realtime version
+    const float mass = 0.034;
+    struct vec a = vscl(9.81f, mkvec(state->acc.x, state->acc.y, state->acc.z + 1.0f));
+    struct vec fu = mkvec(0, 0, motorForce[0] + motorForce[1] + motorForce[2] + motorForce[3]);
+
+    struct quat q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
+    struct mat33 R = quat2rotmat(q);
+
+    Fa = vsub(vscl(mass, a), mvmul(R, fu));
+
+    // convert to g
+    Fa = vscl(1000.0f / 9.81f, Fa);
+#endif
+
+    if (enableNN > 1) {
+
+      // Apply Fa (convert Fa to N first)
+      // TODO: CRAZY HACK
+      *F_d = vsub(*F_d, vscl(9.81f / 1000.0f * scaleHack, Fa));
+    }
+
   }
 }
 
@@ -90,7 +122,6 @@ static void recomputeFa(void)
     // zero entries
     memset(phiSummedOutput, 0, sizeof(phiSummedOutput));
 
-#if 1
     // evaluate rho for each nearby neighbor
     uint8_t numNeighbors = 0;
     // struct allCfState* myState = locSrvGetState(my_id);
@@ -103,9 +134,9 @@ static void recomputeFa(void)
           && xTaskGetTickCount() - otherState->timestamp < 500) {
 
         struct vec dpos = vsub(otherState->pos, lastPos);
-        if (fabsf(dpos.x) <= 0.2f && fabsf(dpos.y) <= 0.5f && dpos.z >= 0.0f && dpos.z <= 0.7f) {
-
-          struct vec dvel = vsub(otherState->vel, myState->vel);
+        // if (fabsf(dpos.x) <= 0.5f && fabsf(dpos.y) <= 0.5f && dpos.z >= -1.0f && dpos.z <= 1.0f) {
+        if (true) {
+          struct vec dvel = vsub(otherState->vel, lastVel);
    
           // evaluate NN
           phiInput[0] = dpos.x;
@@ -124,44 +155,6 @@ static void recomputeFa(void)
         }
       }
     }
-#else
-{
-  // evaluate NN
-  phiInput[0] = 0;
-  phiInput[1] = -0.2;
-  phiInput[2] = 0.5;
-  const float* phiOutput = nn_phi_2(phiInput);
-
-  // sum result
-  for (int i = 0; i < 40; ++i) {
-    phiSummedOutput[i] += phiOutput[i];
-  }
-}
-{
-  // evaluate NN
-  phiInput[0] = 0;
-  phiInput[1] = 0;
-  phiInput[2] = 0.6;
-  const float* phiOutput = nn_phi_2(phiInput);
-
-  // sum result
-  for (int i = 0; i < 40; ++i) {
-    phiSummedOutput[i] += phiOutput[i];
-  }
-}
-// {
-//   // evaluate NN
-//   phiInput[0] = 0;
-//   phiInput[1] = 0.2;
-//   phiInput[2] = 0.5;
-//   const float* phiOutput = nn_phi_2(phiInput);
-
-//   // sum result
-//   for (int i = 0; i < 40; ++i) {
-//     phiSummedOutput[i] += phiOutput[i];
-//   }
-// }
-#endif
 
     // evaluate rho network
     if (numNeighbors > 0) {
@@ -189,6 +182,8 @@ void controllerComputeFaTask(void * prm)
 
 PARAM_GROUP_START(ctrlFa)
 PARAM_ADD(PARAM_UINT8, enableNN, &enableNN)
+// PARAM_ADD(PARAM_FLOAT, scaleHack, &scaleHack)
+
 PARAM_GROUP_STOP(ctrlFa)
 
 LOG_GROUP_START(ctrlFa)

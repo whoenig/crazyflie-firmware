@@ -57,7 +57,7 @@ static struct {
   uint16_t m4;
 } motorPowerSet;
 
-static float motorForce[4];
+float motorForce[4];
 
 // static float g_thrustpart;
 static float g_rollpart;

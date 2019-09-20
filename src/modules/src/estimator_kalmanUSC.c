@@ -13,6 +13,7 @@
 #include "stabilizer_types.h"
 #include "sensors.h"
 #include "param.h"
+#include "log.h"
 
 #include "stm32f4xx.h"
 #include "FreeRTOS.h"
@@ -218,3 +219,9 @@ PARAM_GROUP_START(kalmanUSC)
   PARAM_ADD(PARAM_FLOAT, initialY, &initialPos.y)
   PARAM_ADD(PARAM_FLOAT, initialZ, &initialPos.z)
 PARAM_GROUP_STOP(kalmanUSC)
+
+LOG_GROUP_START(kalmanUSC)
+LOG_ADD(LOG_FLOAT, P00, &ekfa.P[0][0])
+LOG_ADD(LOG_FLOAT, P11, &ekfa.P[1][1])
+LOG_ADD(LOG_FLOAT, P22, &ekfa.P[2][2])
+LOG_GROUP_STOP(kalmanUSC)

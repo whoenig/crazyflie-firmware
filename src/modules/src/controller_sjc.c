@@ -178,10 +178,7 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
       veltmul(Kpos_P, pos_e),
       veltmul(Kpos_I, i_error_pos)));
 
-    // crazy hack!
-    if (pos_e.z > 0) {
-      controllerComputeFa(state, &F_d);
-    }
+    controllerComputeFa(state, &F_d);
 
     control->thrustSI = vmag(F_d);
     // Reset the accumulated error while on the ground

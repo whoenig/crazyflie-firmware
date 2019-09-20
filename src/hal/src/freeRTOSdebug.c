@@ -45,7 +45,7 @@ void vApplicationMallocFailedHook( void )
 	  while(1);
 }
 
-#if (configCHECK_FOR_STACK_OVERFLOW == 1)
+#if (configCHECK_FOR_STACK_OVERFLOW > 0)
 void vApplicationStackOverflowHook(xTaskHandle *pxTask, signed portCHAR *pcTaskName)
 {
   portDISABLE_INTERRUPTS();
