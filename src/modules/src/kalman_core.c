@@ -352,7 +352,6 @@ void kalmanCoreUpdateWithPose(kalmanCoreData_t* this, poseMeasurement_t *pose)
     h[KC_STATE_X+i] = 1;
     scalarUpdate(this, &H, pose->pos[i] - this->S[KC_STATE_X+i], pose->stdDevPos);
   }
-#if 0
   // compute orientation error
   struct quat const q_ekf = mkquat(this->q[1], this->q[2], this->q[3], this->q[0]);
   struct quat const q_measured = mkquat(pose->quat.x, pose->quat.y, pose->quat.z, pose->quat.w);

@@ -73,6 +73,12 @@ static struct vec Katt_I = {0.00025, 0.00025, 0.0005};
 static float Katt_I_limit = 2;
 static struct vec i_error_att;
 
+// D on omega_dot
+static struct vec omega_prev;
+static struct vec domega_hat;
+static float domega_alpha = 0.7f;
+static struct vec Katt_Dw = {0, 0, 0};
+
 // Position gains
 static struct vec Kpos_P = {12, 12, 12};
 static float Kpos_P_limit = 100;
@@ -114,10 +120,16 @@ static inline struct vec vsub3(struct vec a, struct vec b, struct vec c, struct 
   return vadd4(a, vneg(b), vneg(c), vneg(d));
 }
 
+static inline struct vec vsub4(struct vec a, struct vec b, struct vec c, struct vec d, struct vec e) {
+  return vadd(vadd4(a, vneg(b), vneg(c), vneg(d)), vneg(e));
+}
+
 void controllerSJCReset(void)
 {
   i_error_pos = vzero();
   i_error_att = vzero();
+  omega_prev = vzero();
+  domega_hat = vzero();
 }
 
 void controllerSJCInit(void)
@@ -281,17 +293,24 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
   struct vec omega_error = vsub(omega, omega_r);
   i_error_att = vclampscl(vadd(i_error_att, vscl(dt, omega_error)), -Katt_I_limit, Katt_I_limit);
 
+  // D part on omega (to deal with motor delays)
+  struct vec domega = vdiv(vsub(omega, omega_prev), dt);
+  // filter estimate
+  domega_hat = vadd(vscl(1.0f - domega_alpha, domega_hat), vscl(domega_alpha, domega));
+  omega_prev = omega;
+
   // // Integral part on angle
   // struct vec q_error = vsub(qr, q);
   // i_error_att = vclampscl(vadd(i_error_att, vscl(dt, q_error)), -Katt_I_limit, Katt_I_limit);
 
   // compute moments (note there is a typo on the paper in equation 71)
   // u = J omega_r_dot - (J omega) x omega_r - K(omega - omega_r) - Katt_I \integral(w-w_r, dt)
-  u = vsub3(
+  u = vsub4(
     veltmul(Jtune, omega_r_dot),
     vcross(veltmul(J, omega), omega_r),
     veltmul(K, vsub(omega, omega_r)),
-    veltmul(Katt_I, i_error_att));
+    veltmul(Katt_I, i_error_att),
+    veltmul(Katt_Dw, domega_hat));
 
   control->controlMode = controlModeForceTorque;
   control->torque[0] = u.x;
@@ -313,6 +332,11 @@ PARAM_ADD(PARAM_FLOAT, Katt_Ix, &Katt_I.x)
 PARAM_ADD(PARAM_FLOAT, Katt_Iy, &Katt_I.y)
 PARAM_ADD(PARAM_FLOAT, Katt_Iz, &Katt_I.z)
 PARAM_ADD(PARAM_FLOAT, Katt_I_limit, &Katt_I_limit)
+// Attitude Dw
+PARAM_ADD(PARAM_FLOAT, Katt_Dwx, &Katt_Dw.x)
+PARAM_ADD(PARAM_FLOAT, Katt_Dwy, &Katt_Dw.y)
+PARAM_ADD(PARAM_FLOAT, Katt_Dwz, &Katt_Dw.z)
+PARAM_ADD(PARAM_FLOAT, dw_alpha, &domega_alpha)
 // Position P
 PARAM_ADD(PARAM_FLOAT, Kpos_Px, &Kpos_P.x)
 PARAM_ADD(PARAM_FLOAT, Kpos_Py, &Kpos_P.y)
