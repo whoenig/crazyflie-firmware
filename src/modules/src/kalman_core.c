@@ -141,10 +141,10 @@ static const float stdDevInitialPosition_xy = 100;
 static const float stdDevInitialPosition_z = 1;
 static const float stdDevInitialVelocity = 0.01;
 static const float stdDevInitialAttitude_rollpitch = 0.01;
-static const float stdDevInitialAttitude_yaw = 0.1;
+static const float stdDevInitialAttitude_yaw = 0.01;
 
-static float procNoiseAcc_xy = 0.5f;
-static float procNoiseAcc_z = 1.0f;
+static float procNoiseAcc_xy = 1.0f;
+static float procNoiseAcc_z = 2.0f;
 static float procNoiseVel = 0;
 static float procNoisePos = 0;
 static float procNoiseAtt = 0;
@@ -352,7 +352,7 @@ void kalmanCoreUpdateWithPose(kalmanCoreData_t* this, poseMeasurement_t *pose)
     h[KC_STATE_X+i] = 1;
     scalarUpdate(this, &H, pose->pos[i] - this->S[KC_STATE_X+i], pose->stdDevPos);
   }
-
+#if 0
   // compute orientation error
   struct quat const q_ekf = mkquat(this->q[1], this->q[2], this->q[3], this->q[0]);
   struct quat const q_measured = mkquat(pose->quat.x, pose->quat.y, pose->quat.z, pose->quat.w);
