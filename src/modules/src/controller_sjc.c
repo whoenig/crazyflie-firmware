@@ -74,9 +74,8 @@ static float Katt_I_limit = 2;
 static struct vec i_error_att;
 
 // D on omega_dot
-static struct vec omega_prev;
-static struct vec domega_hat;
-static float domega_alpha = 0.7f;
+static struct vec omega_error_prev;
+static struct vec omega_error_dot;
 static struct vec Katt_Dw = {0, 0, 0};
 
 // Position gains
@@ -128,8 +127,8 @@ void controllerSJCReset(void)
 {
   i_error_pos = vzero();
   i_error_att = vzero();
-  omega_prev = vzero();
-  domega_hat = vzero();
+  omega_error_prev = vzero();
+  omega_error_dot = vzero();
 }
 
 void controllerSJCInit(void)
@@ -293,11 +292,10 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
   struct vec omega_error = vsub(omega, omega_r);
   i_error_att = vclampscl(vadd(i_error_att, vscl(dt, omega_error)), -Katt_I_limit, Katt_I_limit);
 
-  // D part on omega (to deal with motor delays)
-  struct vec domega = vdiv(vsub(omega, omega_prev), dt);
+  // D part on omega error (to deal with motor delays)
+  omega_error_dot = vdiv(vsub(omega_error, omega_error_prev), dt);
   // filter estimate
-  domega_hat = vadd(vscl(1.0f - domega_alpha, domega_hat), vscl(domega_alpha, domega));
-  omega_prev = omega;
+  omega_error_prev = omega_error;
 
   // // Integral part on angle
   // struct vec q_error = vsub(qr, q);
@@ -308,9 +306,9 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
   u = vsub4(
     veltmul(Jtune, omega_r_dot),
     vcross(veltmul(J, omega), omega_r),
-    veltmul(K, vsub(omega, omega_r)),
+    veltmul(K, omega_error),
     veltmul(Katt_I, i_error_att),
-    veltmul(Katt_Dw, domega_hat));
+    veltmul(Katt_Dw, omega_error_dot));
 
   control->controlMode = controlModeForceTorque;
   control->torque[0] = u.x;
@@ -336,7 +334,6 @@ PARAM_ADD(PARAM_FLOAT, Katt_I_limit, &Katt_I_limit)
 PARAM_ADD(PARAM_FLOAT, Katt_Dwx, &Katt_Dw.x)
 PARAM_ADD(PARAM_FLOAT, Katt_Dwy, &Katt_Dw.y)
 PARAM_ADD(PARAM_FLOAT, Katt_Dwz, &Katt_Dw.z)
-PARAM_ADD(PARAM_FLOAT, dw_alpha, &domega_alpha)
 // Position P
 PARAM_ADD(PARAM_FLOAT, Kpos_Px, &Kpos_P.x)
 PARAM_ADD(PARAM_FLOAT, Kpos_Py, &Kpos_P.y)
@@ -390,9 +387,9 @@ LOG_ADD(LOG_FLOAT, omegay, &omega.y)
 LOG_ADD(LOG_FLOAT, omegaz, &omega.z)
 
 // omega dot hat
-LOG_ADD(LOG_FLOAT, domegax, &domega_hat.x)
-LOG_ADD(LOG_FLOAT, domegay, &domega_hat.y)
-LOG_ADD(LOG_FLOAT, domegaz, &domega_hat.z)
+LOG_ADD(LOG_FLOAT, domegax, &omega_error_dot.x)
+LOG_ADD(LOG_FLOAT, domegay, &omega_error_dot.y)
+LOG_ADD(LOG_FLOAT, domegaz, &omega_error_dot.z)
 
 // omega_r
 LOG_ADD(LOG_FLOAT, omegarx, &omega_r.x)
