@@ -389,6 +389,11 @@ LOG_ADD(LOG_FLOAT, omegax, &omega.x)
 LOG_ADD(LOG_FLOAT, omegay, &omega.y)
 LOG_ADD(LOG_FLOAT, omegaz, &omega.z)
 
+// omega dot hat
+LOG_ADD(LOG_FLOAT, domegax, &domega_hat.x)
+LOG_ADD(LOG_FLOAT, domegay, &domega_hat.y)
+LOG_ADD(LOG_FLOAT, domegaz, &domega_hat.z)
+
 // omega_r
 LOG_ADD(LOG_FLOAT, omegarx, &omega_r.x)
 LOG_ADD(LOG_FLOAT, omegary, &omega_r.y)
