@@ -36,12 +36,12 @@ Notes:
        to capture higher-order effects such as motor delays. Thus, we allow to tune this J (the J
        in the second part is the real inertia matrix)
     2. We use the current yaw angle instead of the desired yaw angle to compute desired roll/pitch angles
+    3. We add a D-term on omega_r - omega to account for motor delays
   * This implementation is inspired by the implementation of the controller by 
     Giri P Subramanian for CF 1.0
   * Runtime attitude controller: 6us
   * Note that a quaternion-based version is too complex for on-board execution if an analytical model
     of Z^-1 and Z_dot^-1 is to be used
-
 */
 
 #include <math.h>
@@ -172,37 +172,40 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
   if (   setpoint->mode.x == modeAbs
       || setpoint->mode.y == modeAbs
       || setpoint->mode.z == modeAbs) {
-    struct vec pos_d = mkvec(setpoint->position.x, setpoint->position.y, setpoint->position.z);
-    struct vec vel_d = mkvec(setpoint->velocity.x, setpoint->velocity.y, setpoint->velocity.z);
-    struct vec acc_d = mkvec(setpoint->acceleration.x, setpoint->acceleration.y, setpoint->acceleration.z + GRAVITY_MAGNITUDE);
-    struct vec statePos = mkvec(state->position.x, state->position.y, state->position.z);
-    struct vec stateVel = mkvec(state->velocity.x, state->velocity.y, state->velocity.z);
 
-    // errors
-    struct vec pos_e = vclampscl(vsub(pos_d, statePos), -Kpos_P_limit, Kpos_P_limit);
-    struct vec vel_e = vclampscl(vsub(vel_d, stateVel), -Kpos_D_limit, Kpos_D_limit);
-    i_error_pos = vclampscl(vadd(i_error_pos, vscl(dt, pos_e)), -Kpos_I_limit, Kpos_I_limit);
+    if (RATE_DO_EXECUTE(POSITION_RATE, tick)) {
+      struct vec pos_d = mkvec(setpoint->position.x, setpoint->position.y, setpoint->position.z);
+      struct vec vel_d = mkvec(setpoint->velocity.x, setpoint->velocity.y, setpoint->velocity.z);
+      struct vec acc_d = mkvec(setpoint->acceleration.x, setpoint->acceleration.y, setpoint->acceleration.z + GRAVITY_MAGNITUDE);
+      struct vec statePos = mkvec(state->position.x, state->position.y, state->position.z);
+      struct vec stateVel = mkvec(state->velocity.x, state->velocity.y, state->velocity.z);
 
-    struct vec F_d = vscl(g_vehicleMass, vadd4(
-      acc_d,
-      veltmul(Kpos_D, vel_e),
-      veltmul(Kpos_P, pos_e),
-      veltmul(Kpos_I, i_error_pos)));
+      // errors
+      struct vec pos_e = vclampscl(vsub(pos_d, statePos), -Kpos_P_limit, Kpos_P_limit);
+      struct vec vel_e = vclampscl(vsub(vel_d, stateVel), -Kpos_D_limit, Kpos_D_limit);
+      i_error_pos = vclampscl(vadd(i_error_pos, vscl(dt, pos_e)), -Kpos_I_limit, Kpos_I_limit);
 
-    controllerComputeFa(state, &F_d);
+      struct vec F_d = vscl(g_vehicleMass, vadd4(
+        acc_d,
+        veltmul(Kpos_D, vel_e),
+        veltmul(Kpos_P, pos_e),
+        veltmul(Kpos_I, i_error_pos)));
 
-    control->thrustSI = vmag(F_d);
-    // Reset the accumulated error while on the ground
-    if (control->thrustSI < 0.01f) {
-      controllerSJCReset();
+      controllerComputeFa(state, &F_d);
+
+      control->thrustSI = vmag(F_d);
+      // Reset the accumulated error while on the ground
+      if (control->thrustSI < 0.01f) {
+        controllerSJCReset();
+      }
+
+      // Use current yaw instead of desired yaw for roll/pitch
+      float yaw = radians(state->attitude.yaw);
+      qr = mkvec(
+        asinf((F_d.x * sinf(yaw) - F_d.y * cosf(yaw)) / control->thrustSI),
+        atanf((F_d.x * cosf(yaw) + F_d.y * sinf(yaw)) / F_d.z),
+        desiredYaw);
     }
-
-    // Use current yaw instead of desired yaw for roll/pitch
-    float yaw = radians(state->attitude.yaw);
-    qr = mkvec(
-      asinf((F_d.x * sinf(yaw) - F_d.y * cosf(yaw)) / control->thrustSI),
-      atanf((F_d.x * cosf(yaw) + F_d.y * sinf(yaw)) / F_d.z),
-      desiredYaw);
   } else {
     if (setpoint->mode.z == modeDisable) {
       if (setpoint->thrust < 1000) {
