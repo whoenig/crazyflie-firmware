@@ -141,7 +141,7 @@ static const float stdDevInitialPosition_xy = 100;
 static const float stdDevInitialPosition_z = 1;
 static const float stdDevInitialVelocity = 0.01;
 static const float stdDevInitialAttitude_rollpitch = 0.01;
-static const float stdDevInitialAttitude_yaw = 0.01;
+static const float stdDevInitialAttitude_yaw = 1.0;//0.01;
 
 static float procNoiseAcc_xy = 1.0f;
 static float procNoiseAcc_z = 2.0f;

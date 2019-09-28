@@ -296,6 +296,15 @@ void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, 
     }
     quadIsFlying = (xTaskGetTickCount()-lastFlightCmd) < IN_FLIGHT_TIME_THRESHOLD;
 
+    switch(control->controlMode)
+    {
+      case controlModeLegacy:
+        break;
+      case controlModeForceTorque:
+        quadIsFlying = control->thrustSI > 0;
+        break;
+    }
+
     float dt = (float)(osTick-lastPrediction)/configTICK_RATE_HZ;
     kalmanCorePredict(&coreData, thrustAccumulator, &accAccumulator, &gyroAccumulator, dt, quadIsFlying);
 
