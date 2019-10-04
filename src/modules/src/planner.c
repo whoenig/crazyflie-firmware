@@ -39,11 +39,9 @@ implementation of planning state machine
 #include "planner.h"
 
 #include "crtp_localization_service.h"
-
 #ifndef SWIG
 #include "param.h"
 #endif
-
 static uint8_t enableAP = 1;
 static float Ko = 0.1; // gain for obstacles (repulsive)
 static float Kp = 8; // gain for goal (attractive)
@@ -51,7 +49,6 @@ static float Kd = 4;
 static float Rsafe = 0.4;
 static float max_a = 1.0;//1.0;
 static float max_v = 0.25;//25;
-
 static void plan_takeoff_or_landing(struct planner *p, struct vec pos, float yaw, float height, float duration)
 {
 	struct vec takeoff_pos = pos;

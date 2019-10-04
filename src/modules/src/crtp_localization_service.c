@@ -92,7 +92,6 @@ static float extPosStdDev = 0.01;
 static float extQuatStdDev = 4.5e-3;
 static bool isInit = false;
 static uint8_t my_id;
-
 static struct {
   // position - mm
   int16_t x;
@@ -165,8 +164,7 @@ static void extPositionHandler(CRTPPacket* pk)
   stateCompressed.y = ext_pos.y * 1000.0f;
   stateCompressed.z = ext_pos.z * 1000.0f;
   stateCompressed.quat = 0;
-  time = xTaskGetTickCount();
-  stateCompressed.time = time;
+  stateCompressed.time = xTaskGetTickCount();
 }
 
 static void genericLocHandle(CRTPPacket* pk)
@@ -208,8 +206,7 @@ static void genericLocHandle(CRTPPacket* pk)
       ext_pose.quat.z,
       ext_pose.quat.w};
     stateCompressed.quat = quatcompress(q);
-    time = xTaskGetTickCount();
-    stateCompressed.time = time;
+    stateCompressed.time = xTaskGetTickCount();
   } else if (type == EXT_POSE_PACKED) {
     uint8_t numItems = (pk->size - 1) / sizeof(extPosePackedItem);
     for (uint8_t i = 0; i < numItems; ++i) {
@@ -227,8 +224,7 @@ static void genericLocHandle(CRTPPacket* pk)
         stateCompressed.y = item->y;
         stateCompressed.z = item->z;
         stateCompressed.quat = item->quat;
-        time = xTaskGetTickCount();
-        stateCompressed.time = time;
+        stateCompressed.time = xTaskGetTickCount();
       }
       struct allCfState* state = locSrvGetState(item->id);
       if (state)
@@ -263,13 +259,12 @@ static void extPositionPackedHandler(CRTPPacket* pk)
       ext_pos.z = item->z / 1000.0f;
       ext_pos.stdDev = extPosStdDev;
       estimatorEnqueuePosition(&ext_pos);
-
       stateCompressed.x = item->x;
       stateCompressed.y = item->y;
       stateCompressed.z = item->z;
       stateCompressed.quat = 0;
       time = xTaskGetTickCount();
-      stateCompressed.time = time;
+      stateCompressed.time = xTaskGetTickCount();
     }
     struct allCfState* state = locSrvGetState(item->id);
     if (state)
@@ -342,9 +337,6 @@ LOG_GROUP_START(ext_pos)
   LOG_ADD(LOG_FLOAT, Z, &ext_pos.z)
 LOG_GROUP_STOP(ext_pos)
 
-LOG_GROUP_START(locSrv)
-  LOG_ADD(LOG_UINT32, time, &time)           // time when data was received (ms)
-LOG_GROUP_STOP(locSrv)
 
 LOG_GROUP_START(locSrvZ)
   LOG_ADD(LOG_INT16, x, &stateCompressed.x)                 // position - mm
@@ -353,7 +345,7 @@ LOG_GROUP_START(locSrvZ)
 
   LOG_ADD(LOG_UINT32, quat, &stateCompressed.quat)           // compressed quaternion, see quatcompress.h
 
-  LOG_ADD(LOG_UINT16, time, &stateCompressed.time)           // time when data was received (ms)
+  LOG_ADD(LOG_UINT16, tick, &stateCompressed.time)  // time when data was received last (ms/ticks)
 LOG_GROUP_STOP(locSrvZ)
 
 PARAM_GROUP_START(locSrv)

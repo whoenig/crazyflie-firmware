@@ -23,15 +23,18 @@
  *
  * power_distribution_stock.c - Crazyflie stock power distribution code
  */
+#define DEBUG_MODULE "PWR_DIST"
 
 #include "power_distribution.h"
 
+#include <string.h>
 #include "log.h"
 #include "param.h"
 #include "num.h"
 #include "math3d.h"
-
+#include "platform.h"
 #include "motors.h"
+#include "debug.h"
 
 static bool motorSetEnable = false;
 static uint8_t saturationStatus = 0;
@@ -69,7 +72,7 @@ static struct vec torque;
 
 void powerDistributionInit(void)
 {
-  motorsInit(motorMapDefaultBrushed);
+  motorsInit(platformConfigGetMotorMapping());
 }
 
 bool powerDistributionTest(void)
