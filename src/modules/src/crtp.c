@@ -183,7 +183,7 @@ void crtpRxTask(void *param)
           if (xQueueSend(queues[p.port], &p, 0) == errQUEUE_FULL)
           {
             // We should never drop packet
-            // ASSERT(0);
+            ASSERT(0);
           }          
         }
 

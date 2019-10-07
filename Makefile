@@ -40,7 +40,7 @@ CONTROLLER         ?= Any # one of Any, PID, Mellinger
 POWER_DISTRIBUTION ?= stock
 
 #OpenOCD conf
-RTOS_DEBUG        ?= 0ff
+RTOS_DEBUG        ?= 0
 
 LIB = src/lib
 FREERTOS = src/lib/FreeRTOS

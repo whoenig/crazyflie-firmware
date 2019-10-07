@@ -305,8 +305,7 @@ static void stabilizerTask(void* param)
 
       checkEmergencyStopTimeout();
 
-      bool upsideDown = sensorData.acc.z < -0.5f;
-      if (emergencyStop || upsideDown) {
+      if (emergencyStop) {
         powerStop();
       } else {
         powerDistribution(&control);
