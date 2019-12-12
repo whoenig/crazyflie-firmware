@@ -70,6 +70,9 @@ static float g_yawpart;
 static float thrust;
 static struct vec torque;
 
+static float thrust_to_torque = 0.006f;
+static float arm_length = 0.046f; // m
+
 void powerDistributionInit(void)
 {
   motorsInit(platformConfigGetMotorMapping());
@@ -131,8 +134,6 @@ static void powerDistributionForceTorque(const control_t *control)
   // torque.z = clamp(torque.z, -0.0005, 0.0005);
 
   // see https://github.com/jpreiss/libquadrotor/blob/master/src/quad_control.c
-  const float thrust_to_torque = 0.006f;
-  const float arm_length = 0.046f; // m
   const float thrustpart = 0.25f * control->thrustSI; // N (per rotor)
   const float yawpart = -0.25f * torque.z / thrust_to_torque;
 
@@ -290,7 +291,12 @@ PARAM_ADD(PARAM_UINT16, m1, &motorPowerSet.m1)
 PARAM_ADD(PARAM_UINT16, m2, &motorPowerSet.m2)
 PARAM_ADD(PARAM_UINT16, m3, &motorPowerSet.m3)
 PARAM_ADD(PARAM_UINT16, m4, &motorPowerSet.m4)
-PARAM_GROUP_STOP(ring)
+PARAM_GROUP_STOP(motorPowerSet)
+
+PARAM_GROUP_START(sysId)
+PARAM_ADD(PARAM_FLOAT, thrust_to_torque, &thrust_to_torque)
+PARAM_ADD(PARAM_FLOAT, arm_length, &arm_length)
+PARAM_GROUP_STOP(sysId)
 
 LOG_GROUP_START(motor)
 LOG_ADD(LOG_UINT16, m4, &motorPower.m4)

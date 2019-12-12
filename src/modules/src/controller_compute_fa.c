@@ -125,12 +125,16 @@ static void recomputeFa(void)
     // evaluate rho for each nearby neighbor
     uint8_t numNeighbors = 0;
     // struct allCfState* myState = locSrvGetState(my_id);
-    for (int id = MIN_CF_ID; id < MAX_CF_ID; ++id) {
+    for (uint8_t idx = 0; ; ++idx) {
 
-      struct allCfState* otherState = locSrvGetState(id);
+      struct allCfState* otherState = locSrvGetStateByIdx(idx);
+      if (!otherState) {
+        break;
+      }
 
       // ignore myself and agents that have not received an update for 500ms
-      if (id != my_id
+      if (   otherState->id != my_id
+          && otherState->id != 0
           && xTaskGetTickCount() - otherState->timestamp < 500) {
 
         struct vec dpos = vsub(otherState->pos, lastPos);

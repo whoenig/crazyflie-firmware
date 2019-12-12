@@ -110,7 +110,9 @@ static uint32_t time;
 // Keeping track of neighbors
 static float alpha = 0.8;
 static float max_v = 0.5; // m/s
-static struct allCfState all_states[MAX_CF_ID - MIN_CF_ID];
+
+#define NUM_MAX_NEIGHBORS 5
+static struct allCfState all_states[NUM_MAX_NEIGHBORS];
 
 static void locSrvCrtpCB(CRTPPacket* pk);
 static void extPositionHandler(CRTPPacket* pk);
@@ -226,7 +228,7 @@ static void genericLocHandle(CRTPPacket* pk)
         stateCompressed.quat = item->quat;
         stateCompressed.time = xTaskGetTickCount();
       }
-      struct allCfState* state = locSrvGetState(item->id);
+      struct allCfState* state = locSrvGetStateByCfId(item->id);
       if (state)
       {
         struct vec pos = vdiv(mkvec(item->x, item->y, item->z), 1000.0f);
@@ -266,7 +268,7 @@ static void extPositionPackedHandler(CRTPPacket* pk)
       time = xTaskGetTickCount();
       stateCompressed.time = xTaskGetTickCount();
     }
-    struct allCfState* state = locSrvGetState(item->id);
+    struct allCfState* state = locSrvGetStateByCfId(item->id);
     if (state)
     {
       struct vec pos = vdiv(mkvec(item->x, item->y, item->z), 1000.0f);
@@ -323,10 +325,21 @@ void locSrvSendRangeFloat(uint8_t id, float range)
   }
 }
 
-struct allCfState* locSrvGetState(uint8_t cfid)
+struct allCfState* locSrvGetStateByCfId(uint8_t cfid)
 {
-  if (cfid >= MIN_CF_ID && cfid < MAX_CF_ID) {
-    return &all_states[cfid - MIN_CF_ID];
+  for (uint8_t i = 0; i < NUM_MAX_NEIGHBORS; ++i) {
+    if (all_states[i].id == 0 || all_states[i].id == cfid) {
+      all_states[i].id = cfid;
+      return &all_states[i];
+    }
+  }
+  return NULL;
+}
+
+struct allCfState* locSrvGetStateByIdx(uint8_t idx)
+{
+  if (idx < NUM_MAX_NEIGHBORS) {
+    return &all_states[idx];
   }
   return NULL;
 }

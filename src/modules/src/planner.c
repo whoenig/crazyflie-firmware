@@ -62,6 +62,11 @@ static void plan_takeoff_or_landing(struct planner *p, struct vec pos, float yaw
 static struct traj_eval artificial_potential(struct planner *p, struct traj_eval input, float t, uint64_t ticks)
 {
   if (!enableAP) {
+    // update ap-setpoint to current setpoint
+    p->apPos = input.pos;
+    p->apVel = input.vel;
+    p->last_t = t;
+
     return input;
   }
 
@@ -69,14 +74,18 @@ static struct traj_eval artificial_potential(struct planner *p, struct traj_eval
   struct vec a = vadd(vscl(Kp, vclampabs(vsub(input.pos, p->apPos), vrepeat(0.5))),
                       vscl(Kd, vclampabs(vsub(input.vel, p->apVel), vrepeat(0.5))));
 
-  struct allCfState* myState = locSrvGetState(p->my_id);
-  for (int id = MIN_CF_ID; id < MAX_CF_ID; ++id) {
+  struct allCfState* myState = locSrvGetStateByCfId(p->my_id);
+  for (uint8_t idx = 0; ; idx++) {
     // dx: 0.2, dy: 0.6, dz: 0---0.7
 
-    struct allCfState* otherState = locSrvGetState(id);
+    struct allCfState* otherState = locSrvGetStateByIdx(idx);
+    if (!otherState) {
+        break;
+    }
 
     // ignore myself and agents that have not received an update for 500ms
-    if (id != p->my_id
+    if (   otherState->id != p->my_id
+        && otherState->id != 0
         && ticks - otherState->timestamp < 500) {
 
       struct vec dpos = vsub(otherState->pos, myState->pos);

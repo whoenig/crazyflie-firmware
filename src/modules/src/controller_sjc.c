@@ -87,6 +87,9 @@ static struct vec Kpos_I = {8, 8, 8};
 static float Kpos_I_limit = 2;
 static struct vec i_error_pos;
 
+static struct vec Kpos_A = {0, 0, 0};
+static float Kpos_A_limit = 100;
+
 // Inertia matrix (diagonal matrix), see
 // System Identification of the Crazyflie 2.0 Nano Quadrocopter
 // BA theses, Julian Foerster, ETHZ
@@ -179,14 +182,17 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
       struct vec acc_d = mkvec(setpoint->acceleration.x, setpoint->acceleration.y, setpoint->acceleration.z + GRAVITY_MAGNITUDE);
       struct vec statePos = mkvec(state->position.x, state->position.y, state->position.z);
       struct vec stateVel = mkvec(state->velocity.x, state->velocity.y, state->velocity.z);
+      struct vec stateAcc = vscl(9.81, mkvec(state->acc.x, state->acc.y, state->acc.z + 1)); // Gs -> m/s^2
 
       // errors
       struct vec pos_e = vclampscl(vsub(pos_d, statePos), -Kpos_P_limit, Kpos_P_limit);
       struct vec vel_e = vclampscl(vsub(vel_d, stateVel), -Kpos_D_limit, Kpos_D_limit);
+      struct vec acc_e = vclampscl(vsub(acc_d, stateAcc), -Kpos_A_limit, Kpos_A_limit);
       i_error_pos = vclampscl(vadd(i_error_pos, vscl(dt, pos_e)), -Kpos_I_limit, Kpos_I_limit);
 
-      struct vec F_d = vscl(g_vehicleMass, vadd4(
+      struct vec F_d = vscl(g_vehicleMass, vadd5(
         acc_d,
+        veltmul(Kpos_A, acc_e),
         veltmul(Kpos_D, vel_e),
         veltmul(Kpos_P, pos_e),
         veltmul(Kpos_I, i_error_pos)));
@@ -347,6 +353,13 @@ PARAM_ADD(PARAM_FLOAT, Kpos_Dx, &Kpos_D.x)
 PARAM_ADD(PARAM_FLOAT, Kpos_Dy, &Kpos_D.y)
 PARAM_ADD(PARAM_FLOAT, Kpos_Dz, &Kpos_D.z)
 PARAM_ADD(PARAM_FLOAT, Kpos_D_limit, &Kpos_D_limit)
+
+// Position A
+PARAM_ADD(PARAM_FLOAT, Kpos_Ax, &Kpos_A.x)
+PARAM_ADD(PARAM_FLOAT, Kpos_Ay, &Kpos_A.y)
+PARAM_ADD(PARAM_FLOAT, Kpos_Az, &Kpos_A.z)
+PARAM_ADD(PARAM_FLOAT, Kpos_A_limit, &Kpos_A_limit)
+
 // Position I
 PARAM_ADD(PARAM_FLOAT, Kpos_Ix, &Kpos_I.x)
 PARAM_ADD(PARAM_FLOAT, Kpos_Iy, &Kpos_I.y)

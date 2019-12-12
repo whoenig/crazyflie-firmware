@@ -135,7 +135,7 @@ static const float stdDevInitialPosition_xy = 100;
 static const float stdDevInitialPosition_z = 1;
 static const float stdDevInitialVelocity = 0.01;
 static const float stdDevInitialAttitude_rollpitch = 0.01;
-static const float stdDevInitialAttitude_yaw = 1.0;//0.01;
+static float stdDevInitialAttitude_yaw = 1.0;//0.01;
 
 static float procNoiseAcc_xy = 1.0f;
 static float procNoiseAcc_z = 2.0f;
@@ -1047,6 +1047,7 @@ PARAM_GROUP_START(kalman)
   PARAM_ADD(PARAM_FLOAT, initialY, &initialY)
   PARAM_ADD(PARAM_FLOAT, initialZ, &initialZ)
   PARAM_ADD(PARAM_FLOAT, initialYaw, &initialYaw)
+  PARAM_ADD(PARAM_FLOAT, stdInitialYaw, &stdDevInitialAttitude_yaw)
 
   PARAM_ADD(PARAM_UINT8, updateQuat, &updateQuat)
 PARAM_GROUP_STOP(kalman)
