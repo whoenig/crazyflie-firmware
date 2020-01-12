@@ -50,7 +50,6 @@ Notes:
 #include "log.h"
 #include "math3d.h"
 #include "controller_sjc.h"
-#include "controller_compute_fa.h"
 #include "usec_time.h"
 // #include "debug.h"
 
@@ -196,8 +195,6 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
         veltmul(Kpos_D, vel_e),
         veltmul(Kpos_P, pos_e),
         veltmul(Kpos_I, i_error_pos)));
-
-      controllerComputeFa(state, &F_d);
 
       control->thrustSI = vmag(F_d);
       // Reset the accumulated error while on the ground

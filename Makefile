@@ -163,7 +163,6 @@ PROJ_OBJ += controller_sjc.o
 PROJ_OBJ += controller_mellingerSI.o
 PROJ_OBJ += controller_lee.o
 PROJ_OBJ += controller_shi.o
-PROJ_OBJ += controller_compute_fa.o
 
 # High-Level Commander
 PROJ_OBJ += crtp_commander_high_level.o planner.o pptraj.o
@@ -201,60 +200,8 @@ PROJ_OBJ += lighthouse.o
 PROJ_OBJ += activeMarkerDeck.o
 PROJ_OBJ += irled.o
 
-# NN Swarm - Deepset
-# PROJ_OBJ += phi_2.o
-# PROJ_OBJ += rho_2.o
-# PROJ_OBJ += phi_0827_2.o
-# PROJ_OBJ += rho_0827_2.o
-# PROJ_OBJ += phi_0827_2_2.o
-# PROJ_OBJ += rho_0827_2_2.o
-
-# PROJ_OBJ += phi_0828_2_2.o
-# PROJ_OBJ += rho_0828_2_2.o
-
-# PROJ_OBJ += phi_0828_2_3.o
-# PROJ_OBJ += rho_0828_2_3.o
-
-# # mixed random walk + swapping data for training
-# PROJ_OBJ += phi_0909_2.o
-# PROJ_OBJ += rho_0909_2.o
-
-# # 3 cfs data
-# PROJ_OBJ += phi_0912.o
-# PROJ_OBJ += rho_0912.o
-
-# # 3 cfs data + swapping
-# PROJ_OBJ += phi_0912_2.o
-# PROJ_OBJ += rho_0912_2.o
-
-# # 3 cfs data + swapping + data augmentation
-# PROJ_OBJ += phi_0912_3.o
-# PROJ_OBJ += rho_0912_3.o
-
-# # 3 cfs data + swapping + data augmentation (middle position)
-# PROJ_OBJ += phi_0912_4.o
-# PROJ_OBJ += rho_0912_4.o
-
-# # 4 cfs data
-# PROJ_OBJ += phi_0913_1.o
-# PROJ_OBJ += rho_0913_1.o
-
-# Paper data collection
-# # NN w/ 2-agent: use 0909_2_2
-# PROJ_OBJ += phi_0909_2_2.o
-# PROJ_OBJ += rho_0909_2_2.o
-
-# # NN w/ 3-agent: use 0912_3
-# PROJ_OBJ += phi_0912_3.o
-# PROJ_OBJ += rho_0912_3.o
-
-# NN w/ 4-agent: use 0913_3
-PROJ_OBJ += phi_0913_3.o
-PROJ_OBJ += rho_0913_3.o
-
-# # NN for fig8
-# PROJ_OBJ += phi_0914_fig8.o
-# PROJ_OBJ += rho_0914_fig8.o
+# neural network policy
+# PROJ_OBJ += nn_policy.o
 
 ifeq ($(LPS_TDOA_ENABLE), 1)
 CFLAGS += -DLPS_TDOA_ENABLE
