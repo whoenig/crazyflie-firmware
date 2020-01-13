@@ -29,10 +29,6 @@ SOFTWARE.
 #include "log.h"
 #include "math3d.h"
 
-
-#include "rho_2.h"
-#include "phi_2.h"
-
 #include "usec_time.h"
 #include "crtp_localization_service.h"
 #include "configblock.h"
@@ -40,91 +36,52 @@ SOFTWARE.
 #include "FreeRTOS.h"
 #include "task.h"
 
-static struct vec Fa;
+#include "nn.h"
+
 static uint32_t ticks;
 static uint8_t enableNN = 0;
-
-static float scaleHack = 1.0f;
-
-static float phiInput[6];
-static float phiSummedOutput[40];
 static uint8_t my_id;
 
-static struct vec lastPos;
-static struct vec lastVel;
+static struct vec last_goal;
+static struct vec vel_desired;
 
-#ifdef REALTIME_VERSION
-extern float motorForce[4];
-#endif
-
-// 1 neighbor: 1000us
-// 2 neighbors: 1600us
-// 3 neighbors: 2100 us
+// Timing
+// 1 neighbor: TODO
 
 // private functions
-static void controllerComputeFaTask(void * prm);
+static void globalToLocalPolicyTask(void * prm);
 
-void controllerComputeFaInit(void)
+void globalToLocalPolicyInit(void)
 {
   uint64_t address = configblockGetRadioAddress();
   my_id = address & 0xFF;
 
-  lastPos = vzero();
-  lastVel = vzero();
-
-  #ifndef REALTIME_VERSION
   //Start the Fa task
-  xTaskCreate(controllerComputeFaTask, COMPUTE_FA_TASK_NAME,
-              COMPUTE_FA_TASK_STACKSIZE, NULL, COMPUTE_FA_TASK_PRI, NULL);
-  #endif
+  xTaskCreate(globalToLocalPolicyTask, G2L_POLICY_TASK_NAME,
+              G2L_POLICY_TASK_STACKSIZE, NULL, G2L_POLICY_TASK_PRI, NULL);
 }
 
-void controllerComputeFa(const state_t *state, struct vec* F_d)
+void globalToLocalPolicyGet(const struct vec* goal, struct vec* vel)
 {
   if (enableNN > 0) {
-    lastPos = mkvec(state->position.x, state->position.y, state->position.z);
-    lastVel = mkvec(state->velocity.x, state->velocity.y, state->velocity.z);
-
-#ifdef REALTIME_VERSION
-    // realtime version
-    const float mass = 0.034;
-    struct vec a = vscl(9.81f, mkvec(state->acc.x, state->acc.y, state->acc.z + 1.0f));
-    struct vec fu = mkvec(0, 0, motorForce[0] + motorForce[1] + motorForce[2] + motorForce[3]);
-
-    struct quat q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
-    struct mat33 R = quat2rotmat(q);
-
-    Fa = vsub(vscl(mass, a), mvmul(R, fu));
-
-    // convert to g
-    Fa = vscl(1000.0f / 9.81f, Fa);
-#endif
-
-    if (enableNN > 1) {
-
-      // Apply Fa (convert Fa to N first)
-      // TODO: CRAZY HACK
-      *F_d = vsub(*F_d, vscl(9.81f / 1000.0f * scaleHack, Fa));
-    }
-
+    last_goal = *goal;
+    *vel = vel_desired;
   }
 }
 
-static void recomputeFa(void)
+static void recompute(void)
 {
   uint64_t startTime = usecTimestamp();
 
   if (enableNN > 0) {
 
-    // For each agent in the neighborhood, evaluate the rho network and sum the result
-    // over all evaluations
+    // get my current position
+    struct vec pos = locSrvGetStateByCfId(my_id)->pos;
 
-    // zero entries
-    memset(phiSummedOutput, 0, sizeof(phiSummedOutput));
+    // start NN evaluation
+    nn_reset();
 
-    // evaluate rho for each nearby neighbor
-    uint8_t numNeighbors = 0;
-    // struct allCfState* myState = locSrvGetState(my_id);
+    // add all neighbors
     for (uint8_t idx = 0; ; ++idx) {
 
       struct allCfState* otherState = locSrvGetStateByIdx(idx);
@@ -137,65 +94,51 @@ static void recomputeFa(void)
           && otherState->id != 0
           && xTaskGetTickCount() - otherState->timestamp < 500) {
 
-        struct vec dpos = vsub(otherState->pos, lastPos);
-        // if (fabsf(dpos.x) <= 0.5f && fabsf(dpos.y) <= 0.5f && dpos.z >= -1.0f && dpos.z <= 1.0f) {
-        if (true) {
-          struct vec dvel = vsub(otherState->vel, lastVel);
-   
-          // evaluate NN
-          phiInput[0] = dpos.x;
-          phiInput[1] = dpos.y;
-          phiInput[2] = dpos.z;
-          phiInput[3] = dvel.x;
-          phiInput[4] = dvel.y;
-          phiInput[5] = dvel.z;
-          const float* phiOutput = nn_phi_2(phiInput);
+        struct vec dpos = vsub(otherState->pos, pos);
 
-          // sum result
-          for (int i = 0; i < 40; ++i) {
-            phiSummedOutput[i] += phiOutput[i];
-          }
-          ++numNeighbors;
-        }
+        float input[2] = {dpos.x, dpos.y};
+        nn_add_neighbor(input);
       }
     }
 
-    // evaluate rho network
-    if (numNeighbors > 0) {
-      const float* rhoOutput = nn_rho_2(phiSummedOutput);
-      Fa = mkvec(0, 0, rhoOutput[0]);
-    } else {
-      Fa = vzero();
+    // add all obstacles
+    {
+      struct vec dpos = vsub(mkvec(0,0,0), pos);
+      float input[2] = {dpos.x, dpos.y};
+      nn_add_obstacle(input);
     }
+
+    struct vec dpos = vsub(last_goal, pos);
+    float input[2] = {dpos.x, dpos.y};
+    const float* vel = nn_eval(input);
+
+    vel_desired.x = vel[0];
+    vel_desired.y = vel[1];
+    vel_desired.z = 0;
   } else {
-    Fa = vzero();
+    vel_desired = vzero();
   }
 
   ticks = usecTimestamp() - startTime;
 }
 
-void controllerComputeFaTask(void * prm)
+void globalToLocalPolicyTask(void * prm)
 {
   uint32_t lastWakeTime = xTaskGetTickCount();
   // execute at 100 Hz (which is roughly our position update)
   while(1) {
-    recomputeFa();
+    recompute();
     vTaskDelayUntil(&lastWakeTime, F2T(100));
   }
 }
 
-PARAM_GROUP_START(ctrlFa)
+PARAM_GROUP_START(g2lp)
 PARAM_ADD(PARAM_UINT8, enableNN, &enableNN)
-// PARAM_ADD(PARAM_FLOAT, scaleHack, &scaleHack)
+PARAM_GROUP_STOP(g2lp)
 
-PARAM_GROUP_STOP(ctrlFa)
-
-LOG_GROUP_START(ctrlFa)
-
-LOG_ADD(LOG_FLOAT, Fax, &Fa.x)
-LOG_ADD(LOG_FLOAT, Fay, &Fa.y)
-LOG_ADD(LOG_FLOAT, Faz, &Fa.z)
-
+LOG_GROUP_START(g2lp)
+LOG_ADD(LOG_FLOAT, vx, &vel_desired.x)
+LOG_ADD(LOG_FLOAT, vy, &vel_desired.y)
+LOG_ADD(LOG_FLOAT, vz, &vel_desired.z)
 LOG_ADD(LOG_UINT32, ticks, &ticks)
-
-LOG_GROUP_STOP(ctrlFa)
+LOG_GROUP_STOP(g2lp)

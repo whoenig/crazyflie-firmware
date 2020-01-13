@@ -22,14 +22,11 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
-#ifndef __CONTROLLER_COMPUTE_FA_H__
-#define __CONTROLLER_COMPUTE_FA_H__
+#ifndef __GLOBAL_TO_LOCAL_POLICY_H__
+#define __GLOBAL_TO_LOCAL_POLICY_H__
 
-#include "stabilizer_types.h"
-#include "math3d.h"
+void globalToLocalPolicyInit(void);
 
-void controllerComputeFaInit(void);
+void globalToLocalPolicyGet(const struct vec* goal, struct vec* vel);
 
-void controllerComputeFa(const state_t *state, struct vec* F_d);
-
-#endif //__CONTROLLER_COMPUTE_FA_H__
+#endif //__GLOBAL_TO_LOCAL_POLICY_H__

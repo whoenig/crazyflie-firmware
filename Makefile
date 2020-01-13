@@ -201,7 +201,8 @@ PROJ_OBJ += activeMarkerDeck.o
 PROJ_OBJ += irled.o
 
 # neural network policy
-# PROJ_OBJ += nn_policy.o
+PROJ_OBJ += nn.o
+PROJ_OBJ += global_to_local_policy.o
 
 ifeq ($(LPS_TDOA_ENABLE), 1)
 CFLAGS += -DLPS_TDOA_ENABLE

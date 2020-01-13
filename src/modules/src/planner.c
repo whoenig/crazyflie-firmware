@@ -37,12 +37,13 @@ implementation of planning state machine
 */
 #include <stddef.h>
 #include "planner.h"
+#include "global_to_local_policy.h"
 
 #include "crtp_localization_service.h"
 #ifndef SWIG
 #include "param.h"
 #endif
-static uint8_t enableAP = 1;
+static uint8_t enableAP = 1; // 0: disable, 1: regular artifical potential, 2: NN
 static float Ko = 0.1; // gain for obstacles (repulsive)
 static float Kp = 8; // gain for goal (attractive)
 static float Kd = 4;
@@ -61,7 +62,79 @@ static void plan_takeoff_or_landing(struct planner *p, struct vec pos, float yaw
 
 static struct traj_eval artificial_potential(struct planner *p, struct traj_eval input, float t, uint64_t ticks)
 {
-  if (!enableAP) {
+  // use regular artifical potential
+  if (enableAP == 1) {
+
+    // attractive accelleration:
+    struct vec a = vadd(vscl(Kp, vclampabs(vsub(input.pos, p->apPos), vrepeat(0.5))),
+                        vscl(Kd, vclampabs(vsub(input.vel, p->apVel), vrepeat(0.5))));
+
+    struct allCfState* myState = locSrvGetStateByCfId(p->my_id);
+    for (uint8_t idx = 0; ; idx++) {
+      // dx: 0.2, dy: 0.6, dz: 0---0.7
+
+      struct allCfState* otherState = locSrvGetStateByIdx(idx);
+      if (!otherState) {
+          break;
+      }
+
+      // ignore myself and agents that have not received an update for 500ms
+      if (   otherState->id != p->my_id
+          && otherState->id != 0
+          && ticks - otherState->timestamp < 500) {
+
+        struct vec dpos = vsub(otherState->pos, myState->pos);
+        float dist = vmag(dpos);
+        if (dist < Rsafe) {
+          a = vsub(a, vscl(Ko / powf(dist, 3), dpos));
+        }
+      }
+    }
+    // if (p->my_id == 1) {
+    //   printf("%f,%f,%f\n", a.x, a.y, a.z);
+    // }
+
+    // bound force
+    a = vclampabs(a, vrepeat(max_a));
+
+    const float dt = t - p->last_t;//1.0 / 500.0f;
+    // printf("%f\n", dt);
+
+    // propagate double integrator
+    p->apPos = vadd(p->apPos, vscl(dt, p->apVel));
+    p->apVel = vclampabs(vadd(p->apVel, vscl(dt, a)), vrepeat(max_v));
+    p->last_t = t;
+
+    struct traj_eval ev;
+    // ev.pos = vadd(input.pos, vscl(dt * dt, force));
+    // ev.vel = vzero();
+    ev.pos = p->apPos;
+    ev.vel = p->apVel;
+    ev.acc = a;
+    ev.omega = vzero();
+    return ev;
+  }
+
+  // use neural network
+  else if (enableAP == 2) {
+    // get latest velocity command
+    globalToLocalPolicyGet(&input.pos, &p->apVel);
+
+    // propagate single integrator
+    const float dt = t - p->last_t;
+    p->apPos = vadd(p->apPos, vscl(dt, p->apVel));
+    p->last_t = t;
+
+    struct traj_eval ev;
+    ev.pos = p->apPos;
+    ev.vel = p->apVel;
+    ev.acc = vzero();
+    ev.omega = vzero();
+    return ev;
+  }
+
+  // AP disabled
+  else {
     // update ap-setpoint to current setpoint
     p->apPos = input.pos;
     p->apVel = input.vel;
@@ -69,55 +142,6 @@ static struct traj_eval artificial_potential(struct planner *p, struct traj_eval
 
     return input;
   }
-
-  // attractive accelleration:
-  struct vec a = vadd(vscl(Kp, vclampabs(vsub(input.pos, p->apPos), vrepeat(0.5))),
-                      vscl(Kd, vclampabs(vsub(input.vel, p->apVel), vrepeat(0.5))));
-
-  struct allCfState* myState = locSrvGetStateByCfId(p->my_id);
-  for (uint8_t idx = 0; ; idx++) {
-    // dx: 0.2, dy: 0.6, dz: 0---0.7
-
-    struct allCfState* otherState = locSrvGetStateByIdx(idx);
-    if (!otherState) {
-        break;
-    }
-
-    // ignore myself and agents that have not received an update for 500ms
-    if (   otherState->id != p->my_id
-        && otherState->id != 0
-        && ticks - otherState->timestamp < 500) {
-
-      struct vec dpos = vsub(otherState->pos, myState->pos);
-      float dist = vmag(dpos);
-      if (dist < Rsafe) {
-        a = vsub(a, vscl(Ko / powf(dist, 3), dpos));
-      }
-    }
-  }
-  // if (p->my_id == 1) {
-  //   printf("%f,%f,%f\n", a.x, a.y, a.z);
-  // }
-
-  // bound force
-  a = vclampabs(a, vrepeat(max_a));
-
-  const float dt = t - p->last_t;//1.0 / 500.0f;
-  // printf("%f\n", dt);
-
-  // propagate double integrator
-  p->apPos = vadd(p->apPos, vscl(dt, p->apVel));
-  p->apVel = vclampabs(vadd(p->apVel, vscl(dt, a)), vrepeat(max_v));
-  p->last_t = t;
-
-  struct traj_eval ev;
-  // ev.pos = vadd(input.pos, vscl(dt * dt, force));
-  // ev.vel = vzero();
-  ev.pos = p->apPos;
-  ev.vel = p->apVel;
-  ev.acc = a;
-  ev.omega = vzero();
-  return ev;
 }
 
 // ----------------- //
@@ -133,6 +157,8 @@ void plan_init(struct planner *p, int my_id)
   p->my_id = my_id;
   p->apPos = vzero();
   p->apVel = vzero();
+
+  globalToLocalPolicyInit();
 }
 
 void plan_stop(struct planner *p)
