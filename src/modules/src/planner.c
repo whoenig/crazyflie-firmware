@@ -127,7 +127,9 @@ static struct traj_eval artificial_potential(struct planner *p, struct traj_eval
 
     struct traj_eval ev;
     ev.pos = p->apPos;
+    ev.pos.z = input.pos.z;
     ev.vel = p->apVel;
+    ev.vel.z = input.vel.z;
     ev.acc = vzero();
     ev.omega = vzero();
     return ev;
@@ -225,8 +227,9 @@ int plan_takeoff(struct planner *p, struct vec pos, float yaw, float height, flo
 	p->state = TRAJECTORY_STATE_FLYING;
 	p->planned_trajectory.t_begin = t;
 	p->trajectory = &p->planned_trajectory;
-  p->apPos = pos;
-  p->apVel = vzero();
+	p->apPos = pos;
+	p->apVel = vzero();
+	p->last_t = t;
 	return 0;
 }
 

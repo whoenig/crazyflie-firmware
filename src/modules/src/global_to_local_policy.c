@@ -40,13 +40,14 @@ SOFTWARE.
 
 static uint32_t ticks;
 static uint8_t enableNN = 0;
+static float scale = 1.0;
 static uint8_t my_id;
 
 static struct vec last_goal;
 static struct vec vel_desired;
 
 // Timing
-// 1 neighbor: TODO
+// 1 neighbor: 800us
 
 // private functions
 static void globalToLocalPolicyTask(void * prm);
@@ -112,8 +113,8 @@ static void recompute(void)
     float input[2] = {dpos.x, dpos.y};
     const float* vel = nn_eval(input);
 
-    vel_desired.x = vel[0];
-    vel_desired.y = vel[1];
+    vel_desired.x = scale * vel[0];
+    vel_desired.y = scale * vel[1];
     vel_desired.z = 0;
   } else {
     vel_desired = vzero();
@@ -134,11 +135,11 @@ void globalToLocalPolicyTask(void * prm)
 
 PARAM_GROUP_START(g2lp)
 PARAM_ADD(PARAM_UINT8, enableNN, &enableNN)
+PARAM_ADD(PARAM_FLOAT, scale, &scale)
 PARAM_GROUP_STOP(g2lp)
 
 LOG_GROUP_START(g2lp)
 LOG_ADD(LOG_FLOAT, vx, &vel_desired.x)
 LOG_ADD(LOG_FLOAT, vy, &vel_desired.y)
-LOG_ADD(LOG_FLOAT, vz, &vel_desired.z)
 LOG_ADD(LOG_UINT32, ticks, &ticks)
 LOG_GROUP_STOP(g2lp)
