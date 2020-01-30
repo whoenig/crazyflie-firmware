@@ -125,10 +125,10 @@ static void recompute(void)
 void globalToLocalPolicyTask(void * prm)
 {
   uint32_t lastWakeTime = xTaskGetTickCount();
-  // execute at 100 Hz (which is roughly our position update)
+  // execute at 20 Hz to match simulation
   while(1) {
     recompute();
-    vTaskDelayUntil(&lastWakeTime, F2T(100));
+    vTaskDelayUntil(&lastWakeTime, F2T(20));
   }
 }
 
