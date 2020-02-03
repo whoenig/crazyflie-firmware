@@ -4,6 +4,9 @@
 
 #include "nn.h"
 
+// CF specific
+#include "param.h"
+
 // unconventional: include generated c-file in here
 #include "generated_weights.c"
 
@@ -16,15 +19,15 @@ static float deepset_sum_obstacle[8];
 // static const float b_gamma = 0.1;
 // static const float b_exph = 1.0;
 static const float robot_radius = 0.15; // m
-static const float max_v = 0.5; // m/s
-static const float pi_max = 0.9f * 0.5f;
+static float max_v = 0.5; // m/s
+static float pi_max = 0.9f * 0.5f;
 
 // Barrier stuff
 static float barrier_grad_phi[2];
 static bool barrier_alpha_condition;
-static const float deltaR = 0.5 * 0.05;
+static float deltaR = 0.5 * 0.05;
 static const float Rsense = 3.0;
-static const float barrier_gamma = 0.005;
+static float barrier_gamma = 0.005;
 
 static float relu(float num) {
 	if (num > 0) {
@@ -253,3 +256,10 @@ const float* nn_eval(const float goal[2])
 	return temp1;
 }
 
+PARAM_GROUP_START(nn)
+PARAM_ADD(PARAM_FLOAT, max_v, &max_v)
+PARAM_ADD(PARAM_FLOAT, pi_max, &pi_max)
+PARAM_ADD(PARAM_FLOAT, deltaR, &deltaR)
+PARAM_ADD(PARAM_FLOAT, gamma, &barrier_gamma)
+
+PARAM_GROUP_STOP(nn)

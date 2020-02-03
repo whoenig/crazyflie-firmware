@@ -128,7 +128,8 @@ static struct traj_eval artificial_potential(struct planner *p, struct traj_eval
     struct traj_eval ev;
     ev.pos = p->apPos;
     ev.pos.z = input.pos.z;
-    ev.vel = p->apVel;
+    // ev.vel = p->apVel;
+    ev.vel = vzero();
     ev.vel.z = input.vel.z;
     ev.acc = vzero();
     ev.omega = vzero();

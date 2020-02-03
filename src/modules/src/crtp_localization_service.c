@@ -111,7 +111,7 @@ static uint32_t time;
 static float alpha = 0.8;
 static float max_v = 0.5; // m/s
 
-#define NUM_MAX_NEIGHBORS 5
+#define NUM_MAX_NEIGHBORS 10
 static struct allCfState all_states[NUM_MAX_NEIGHBORS];
 
 static void locSrvCrtpCB(CRTPPacket* pk);

@@ -46,6 +46,14 @@ static uint8_t my_id;
 static struct vec last_goal;
 static struct vec vel_desired;
 
+struct obstacle {
+  float x;
+  float y;
+  uint8_t enabled;
+};
+#define MAX_OBSTACLES (3)
+static struct obstacle obstacles[MAX_OBSTACLES];
+
 // Timing
 // 1 neighbor: 800us
 
@@ -56,6 +64,10 @@ void globalToLocalPolicyInit(void)
 {
   uint64_t address = configblockGetRadioAddress();
   my_id = address & 0xFF;
+
+  for (int i = 0; i < MAX_OBSTACLES; ++i) {
+    obstacles[i].enabled = 0;
+  }
 
   //Start the Fa task
   xTaskCreate(globalToLocalPolicyTask, G2L_POLICY_TASK_NAME,
@@ -103,10 +115,12 @@ static void recompute(void)
     }
 
     // add all obstacles
-    {
-      struct vec dpos = vsub(mkvec(0,0,0), pos);
-      float input[2] = {dpos.x, dpos.y};
-      nn_add_obstacle(input);
+    for (int i = 0; i < MAX_OBSTACLES; ++i) {
+      if (obstacles[i].enabled) {
+        struct vec dpos = vsub(mkvec(obstacles[i].x,obstacles[i].y,0), pos);
+        float input[2] = {dpos.x, dpos.y};
+        nn_add_obstacle(input);
+      }
     }
 
     struct vec dpos = vsub(last_goal, pos);
@@ -136,6 +150,19 @@ void globalToLocalPolicyTask(void * prm)
 PARAM_GROUP_START(g2lp)
 PARAM_ADD(PARAM_UINT8, enableNN, &enableNN)
 PARAM_ADD(PARAM_FLOAT, scale, &scale)
+
+PARAM_ADD(PARAM_FLOAT, obs0x, &obstacles[0].x)
+PARAM_ADD(PARAM_FLOAT, obs0y, &obstacles[0].y)
+PARAM_ADD(PARAM_UINT8, obs0en, &obstacles[0].enabled)
+
+PARAM_ADD(PARAM_FLOAT, obs1x, &obstacles[1].x)
+PARAM_ADD(PARAM_FLOAT, obs1y, &obstacles[1].y)
+PARAM_ADD(PARAM_UINT8, obs1en, &obstacles[1].enabled)
+
+PARAM_ADD(PARAM_FLOAT, obs2x, &obstacles[2].x)
+PARAM_ADD(PARAM_FLOAT, obs2y, &obstacles[2].y)
+PARAM_ADD(PARAM_UINT8, obs2en, &obstacles[2].enabled)
+
 PARAM_GROUP_STOP(g2lp)
 
 LOG_GROUP_START(g2lp)
