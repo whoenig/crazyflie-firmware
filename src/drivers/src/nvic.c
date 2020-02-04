@@ -139,7 +139,15 @@ void DONT_DISCARD printHardFault(uint32_t* hardfaultArgs)
   ledSet(ERR_LED1, 1);
   ledSet(ERR_LED2, 1);
 
-  storeAssertSnapshotData(__FILE__, __LINE__);
+  storeAssertHardfaultData(
+    stacked_r0,
+    stacked_r1,
+    stacked_r2,
+    stacked_r3,
+    stacked_r12,
+    stacked_lr,
+    stacked_pc,
+    stacked_psr);
   while (1)
   {}
 }
