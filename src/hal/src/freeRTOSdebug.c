@@ -33,6 +33,7 @@
 #include "debug.h"
 #include "nvicconf.h"
 #include "led.h"
+#include "motors.h"
 
 uint32_t traceTickCount;
 
@@ -42,6 +43,8 @@ void vApplicationMallocFailedHook( void )
 	  DEBUG_PRINT("\nMalloc failed!\n");
 	  ledSet(ERR_LED1, 1);
 	  ledSet(ERR_LED2, 1);
+    motorsDisable();
+    storeAssertTextData("Malloc failed");
 	  while(1);
 }
 
@@ -52,6 +55,8 @@ void vApplicationStackOverflowHook(xTaskHandle *pxTask, signed portCHAR *pcTaskN
   DEBUG_PRINT("\nStack overflow!\n");
   ledSet(ERR_LED1, 1);
   ledSet(ERR_LED2, 1);
+  motorsDisable();
+  storeAssertTextData("Stack overflow");
   while(1);
 }
 #endif

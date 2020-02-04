@@ -138,6 +138,7 @@ void DONT_DISCARD printHardFault(uint32_t* hardfaultArgs)
   ledClearAll();
   ledSet(ERR_LED1, 1);
   ledSet(ERR_LED2, 1);
+  motorsDisable();
 
   storeAssertHardfaultData(
     stacked_r0,
@@ -165,8 +166,9 @@ void DONT_DISCARD MemManage_Handler(void)
   ledClearAll();
   ledSet(ERR_LED1, 1);
   ledSet(ERR_LED2, 1);
+  motorsDisable();
 
-  storeAssertSnapshotData(__FILE__, __LINE__);
+  storeAssertTextData("MemManage");
   while (1)
   {}
 }
@@ -185,8 +187,9 @@ void DONT_DISCARD BusFault_Handler(void)
   ledClearAll();
   ledSet(ERR_LED1, 1);
   ledSet(ERR_LED2, 1);
+  motorsDisable();
 
-  storeAssertSnapshotData(__FILE__, __LINE__);
+  storeAssertTextData("BusFault");
   while (1)
   {}
 }
@@ -205,8 +208,9 @@ void DONT_DISCARD UsageFault_Handler(void)
   ledClearAll();
   ledSet(ERR_LED1, 1);
   ledSet(ERR_LED2, 1);
+  motorsDisable();
 
-  storeAssertSnapshotData(__FILE__, __LINE__);
+  storeAssertTextData("UsageFault");
   while (1)
   {}
 }

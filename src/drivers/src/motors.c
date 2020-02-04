@@ -232,6 +232,13 @@ bool motorsTest(void)
   return isInit;
 }
 
+void motorsDisable(void)
+{
+  for (int id = 0; id < NBR_OF_MOTORS; ++id) {
+    motorsSetRatio(id, 0);
+  }
+}
+
 // Ithrust is thrust mapped for 65536 <==> 15 grams (per rotor)
 void motorsSetRatio(uint32_t id, uint16_t ithrust)
 {

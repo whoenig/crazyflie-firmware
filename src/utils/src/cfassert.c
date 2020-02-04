@@ -40,6 +40,7 @@ enum snapshotType_e
   SnapshotTypeInvalid = 0,
   SnapshotTypeFile = 1,
   SnapshotTypeHardFault = 2,
+  SnapshotTypeText = 3,
 };
 
 typedef struct SNAPSHOT_DATA {
@@ -47,7 +48,7 @@ typedef struct SNAPSHOT_DATA {
   enum snapshotType_e type;
   union {
     struct {
-      char* fileName;
+      const char* fileName;
       int line;
     } file;
     struct {
@@ -60,6 +61,9 @@ typedef struct SNAPSHOT_DATA {
       unsigned int pc;
       unsigned int psr;
     } hardfault;
+    struct {
+      const char* text;
+    } text;
   };
 } SNAPSHOT_DATA;
 
@@ -74,7 +78,7 @@ SNAPSHOT_DATA snapshot __attribute__((section(".nzds"))) = {
 void assertFail(char *exp, char *file, int line)
 {
   portDISABLE_INTERRUPTS();
-  storeAssertSnapshotData(file, line);
+  storeAssertFileData(file, line);
   DEBUG_PRINT("Assert failed %s:%d\n", file, line);
 
   motorsSetRatio(MOTOR_M1, 0);
@@ -85,11 +89,12 @@ void assertFail(char *exp, char *file, int line)
   ledClearAll();
   ledSet(ERR_LED1, 1);
   ledSet(ERR_LED2, 1);
+  motorsDisable();
 
   while (1);
 }
 
-void storeAssertSnapshotData(char *file, int line)
+void storeAssertFileData(const char *file, int line)
 {
   snapshot.magicNumber = MAGIC_ASSERT_INDICATOR;
   snapshot.type = SnapshotTypeFile;
@@ -119,6 +124,13 @@ void storeAssertHardfaultData(
   snapshot.hardfault.psr = psr;
 }
 
+void storeAssertTextData(const char *text)
+{
+  snapshot.magicNumber = MAGIC_ASSERT_INDICATOR;
+  snapshot.type = SnapshotTypeText;
+  snapshot.text.text = text;
+}
+
 void printAssertSnapshotData()
 {
   if (MAGIC_ASSERT_INDICATOR == snapshot.magicNumber) {
@@ -136,6 +148,9 @@ void printAssertSnapshotData()
           snapshot.hardfault.lr,
           snapshot.hardfault.pc,
           snapshot.hardfault.psr);
+        break;
+      case SnapshotTypeText:
+        DEBUG_PRINT("Assert failed: %s\n", snapshot.text.text);
         break;
       default:
         DEBUG_PRINT("Assert failed, but unknown type\n");
