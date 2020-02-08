@@ -117,21 +117,23 @@ static struct traj_eval artificial_potential(struct planner *p, struct traj_eval
 
   // use neural network
   else if (enableAP == 2) {
-    // get latest velocity command
-    globalToLocalPolicyGet(&input.pos, &p->apVel);
+    // get latest acceleration command
+    struct vec acc;
+    globalToLocalPolicyGet(&input.pos, &acc);
 
-    // propagate single integrator
+    // propagate double integrator
     const float dt = t - p->last_t;
     p->apPos = vadd(p->apPos, vscl(dt, p->apVel));
+    p->apVel = vclampabs(vadd(p->apVel, vscl(dt, acc)), vrepeat(max_v));
     p->last_t = t;
 
     struct traj_eval ev;
     ev.pos = p->apPos;
     ev.pos.z = input.pos.z;
-    // ev.vel = p->apVel;
-    ev.vel = vzero();
+    ev.vel = p->apVel;
     ev.vel.z = input.vel.z;
-    ev.acc = vzero();
+    ev.acc = acc;
+    ev.acc.z = input.acc.z;
     ev.omega = vzero();
     return ev;
   }

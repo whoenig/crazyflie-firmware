@@ -10,11 +10,11 @@
 // unconventional: include generated c-file in here
 #include "generated_weights.c"
 
-static float temp1[32];
-static float temp2[32];
+static float temp1[64];
+static float temp2[64];
 
-static float deepset_sum_neighbor[8];
-static float deepset_sum_obstacle[8];
+static float deepset_sum_neighbor[16];
+static float deepset_sum_obstacle[16];
 
 // static const float b_gamma = 0.1;
 // static const float b_exph = 1.0;
@@ -52,41 +52,41 @@ static void layer(int rows, int cols, const float in[], const float layer_weight
 }
 
 static const float* n_phi(const float input[]) {
-	layer(2, 32, input, weights_n_phi.layers_0_weight, weights_n_phi.layers_0_bias, temp1, 1);
-	layer(32, 32, temp1, weights_n_phi.layers_1_weight, weights_n_phi.layers_1_bias, temp2, 1);
-	layer(32, 8, temp2, weights_n_phi.layers_2_weight, weights_n_phi.layers_2_bias, temp1, 0);
+	layer(4, 64, input, weights_n_phi.layers_0_weight, weights_n_phi.layers_0_bias, temp1, 1);
+	layer(64, 64, temp1, weights_n_phi.layers_1_weight, weights_n_phi.layers_1_bias, temp2, 1);
+	layer(64, 16, temp2, weights_n_phi.layers_2_weight, weights_n_phi.layers_2_bias, temp1, 0);
 
 	return temp1;
 }
 
 static const float* n_rho(const float input[]) {
-	layer(8, 32, input, weights_n_rho.layers_0_weight, weights_n_rho.layers_0_bias, temp1, 1);
-	layer(32, 32, temp1, weights_n_rho.layers_1_weight, weights_n_rho.layers_1_bias, temp2, 1);
-	layer(32, 8, temp2, weights_n_rho.layers_2_weight, weights_n_rho.layers_2_bias, temp1, 0);
+	layer(16, 64, input, weights_n_rho.layers_0_weight, weights_n_rho.layers_0_bias, temp1, 1);
+	layer(64, 64, temp1, weights_n_rho.layers_1_weight, weights_n_rho.layers_1_bias, temp2, 1);
+	layer(64, 16, temp2, weights_n_rho.layers_2_weight, weights_n_rho.layers_2_bias, temp1, 0);
 
 	return temp1;
 }
 
 static const float* o_phi(const float input[]) {
-	layer(2, 32, input, weights_o_phi.layers_0_weight, weights_o_phi.layers_0_bias, temp1, 1);
-	layer(32, 32, temp1, weights_o_phi.layers_1_weight, weights_o_phi.layers_1_bias, temp2, 1);
-	layer(32, 8, temp2, weights_o_phi.layers_2_weight, weights_o_phi.layers_2_bias, temp1, 0);
+	layer(4, 64, input, weights_o_phi.layers_0_weight, weights_o_phi.layers_0_bias, temp1, 1);
+	layer(64, 64, temp1, weights_o_phi.layers_1_weight, weights_o_phi.layers_1_bias, temp2, 1);
+	layer(64, 16, temp2, weights_o_phi.layers_2_weight, weights_o_phi.layers_2_bias, temp1, 0);
 
 	return temp1;
 }
 
 static const float* o_rho(const float input[]) {
-	layer(8, 32, input, weights_o_rho.layers_0_weight, weights_o_rho.layers_0_bias, temp1, 1);
-	layer(32, 32, temp1, weights_o_rho.layers_1_weight, weights_o_rho.layers_1_bias, temp2, 1);
-	layer(32, 8, temp2, weights_o_rho.layers_2_weight, weights_o_rho.layers_2_bias, temp1, 0);
+	layer(16, 64, input, weights_o_rho.layers_0_weight, weights_o_rho.layers_0_bias, temp1, 1);
+	layer(64, 64, temp1, weights_o_rho.layers_1_weight, weights_o_rho.layers_1_bias, temp2, 1);
+	layer(64, 16, temp2, weights_o_rho.layers_2_weight, weights_o_rho.layers_2_bias, temp1, 0);
 
 	return temp1;
 }
 
 static const float* psi(const float input[]) {
-	layer(18, 32, input, weights_psi.layers_0_weight, weights_psi.layers_0_bias, temp1, 1);
-	layer(32, 32, temp1, weights_psi.layers_1_weight, weights_psi.layers_1_bias, temp2, 1);
-	layer(32, 2, temp2, weights_psi.layers_2_weight, weights_psi.layers_2_bias, temp1, 0);
+	layer(16+16+4, 64, input, weights_psi.layers_0_weight, weights_psi.layers_0_bias, temp1, 1);
+	layer(64, 64, temp1, weights_psi.layers_1_weight, weights_psi.layers_1_bias, temp2, 1);
+	layer(64, 2, temp2, weights_psi.layers_2_weight, weights_psi.layers_2_bias, temp1, 0);
 
 	// // scaling part
 	// const float psi_min = -0.5;
@@ -137,11 +137,11 @@ void nn_reset()
 	barrier_alpha_condition = false;
 }
 
-void nn_add_neighbor(const float input[2])
+void nn_add_neighbor(const float input[4])
 {
 	const float* phi = n_phi(input);
 	// sum result
-	for (int i = 0; i < 8; ++i) {
+	for (int i = 0; i < 16; ++i) {
 		deepset_sum_neighbor[i] += phi[i];
 	}
 
@@ -164,11 +164,11 @@ void nn_add_neighbor(const float input[2])
 	}
 }
 
-void nn_add_obstacle(const float input[2])
+void nn_add_obstacle(const float input[4])
 {
 	const float* phi = o_phi(input);
 	// sum result
-	for (int i = 0; i < 8; ++i) {
+	for (int i = 0; i < 16; ++i) {
 		deepset_sum_obstacle[i] += phi[i];
 	}
 
@@ -190,17 +190,17 @@ void nn_add_obstacle(const float input[2])
 	}
 }
 
-const float* nn_eval(const float goal[2])
+const float* nn_eval(const float goal[4])
 {
-	static float pi_input[18];
+	static float pi_input[36];
 
 	const float* neighbors = n_rho(deepset_sum_neighbor);
-	memcpy(&pi_input[0], neighbors, 8 * sizeof(float));
+	memcpy(&pi_input[0], neighbors, 16 * sizeof(float));
 
 	const float* obstacles = o_rho(deepset_sum_obstacle);
-	memcpy(&pi_input[8], obstacles, 8 * sizeof(float));
+	memcpy(&pi_input[16], obstacles, 16 * sizeof(float));
 
-	memcpy(&pi_input[16], goal, 2 * sizeof(float));
+	memcpy(&pi_input[32], goal, 4 * sizeof(float));
 
 	const float* empty = psi(pi_input);
 
@@ -209,42 +209,42 @@ const float* nn_eval(const float goal[2])
 	// temp1[0] = kp*goal[0];
 	// temp1[1] = kp*goal[1];
 
-	// for barrier, we need to scale empty to pi_max:
-	float empty_norm = sqrtf(powf(empty[0], 2) + powf(empty[1], 2));
-	if (empty_norm > 0) {
-		const float scale = fminf(1.0f, pi_max / empty_norm);
-		temp1[0] = scale * empty[0];
-		temp1[1] = scale * empty[1];
-	} else {
-		temp1[0] = empty[0];
-		temp1[1] = empty[1];
-	}
+	// // for barrier, we need to scale empty to pi_max:
+	// float empty_norm = sqrtf(powf(empty[0], 2) + powf(empty[1], 2));
+	// if (empty_norm > 0) {
+	// 	const float scale = fminf(1.0f, pi_max / empty_norm);
+	// 	temp1[0] = scale * empty[0];
+	// 	temp1[1] = scale * empty[1];
+	// } else {
+	// 	temp1[0] = empty[0];
+	// 	temp1[1] = empty[1];
+	// }
 
-	// Barrier:
-	float b[2] = {0, 0};
-	b[0] = -barrier_gamma * barrier_grad_phi[0];
-	b[1] = -barrier_gamma * barrier_grad_phi[1];
+	// // Barrier:
+	// float b[2] = {0, 0};
+	// b[0] = -barrier_gamma * barrier_grad_phi[0];
+	// b[1] = -barrier_gamma * barrier_grad_phi[1];
 
-	float alpha = 1.0;
-	if (barrier_alpha_condition) {
-		float bnorm = sqrtf(powf(b[0], 2) + powf(b[1], 2));
-		float pinorm = sqrtf(powf(temp1[0], 2) + powf(temp1[1], 2));
-		if (pinorm > 0) {
-			alpha = fminf(1.0f, bnorm / pinorm);
-		}
-	}
+	// float alpha = 1.0;
+	// if (barrier_alpha_condition) {
+	// 	float bnorm = sqrtf(powf(b[0], 2) + powf(b[1], 2));
+	// 	float pinorm = sqrtf(powf(temp1[0], 2) + powf(temp1[1], 2));
+	// 	if (pinorm > 0) {
+	// 		alpha = fminf(1.0f, bnorm / pinorm);
+	// 	}
+	// }
 
-	temp1[0] = b[0] + alpha * temp1[0];
-	temp1[1] = b[1] + alpha * temp1[1];
+	// temp1[0] = b[0] + alpha * temp1[0];
+	// temp1[1] = b[1] + alpha * temp1[1];
 
-	// scaling
-	float temp1_norm = sqrtf(powf(temp1[0], 2) + powf(temp1[1], 2));
-	float alpha2 = 1.0;
-	if (temp1_norm > 0) {
-		alpha2 = fminf(1.0f, max_v / temp1_norm);
-	}
-	temp1[0] *= alpha2;
-	temp1[1] *= alpha2;
+	// // scaling
+	// float temp1_norm = sqrtf(powf(temp1[0], 2) + powf(temp1[1], 2));
+	// float alpha2 = 1.0;
+	// if (temp1_norm > 0) {
+	// 	alpha2 = fminf(1.0f, max_v / temp1_norm);
+	// }
+	// temp1[0] *= alpha2;
+	// temp1[1] *= alpha2;
 
 	// APF(temp1);
 

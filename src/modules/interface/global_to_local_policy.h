@@ -27,6 +27,6 @@
 
 void globalToLocalPolicyInit(void);
 
-void globalToLocalPolicyGet(const struct vec* goal, struct vec* vel);
+void globalToLocalPolicyGet(const struct vec* goal, struct vec* acc);
 
 #endif //__GLOBAL_TO_LOCAL_POLICY_H__

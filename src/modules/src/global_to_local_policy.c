@@ -44,7 +44,7 @@ static float scale = 1.0;
 static uint8_t my_id;
 
 static struct vec last_goal;
-static struct vec vel_desired;
+static struct vec acc_desired;
 
 struct obstacle {
   float x;
@@ -55,7 +55,11 @@ struct obstacle {
 static struct obstacle obstacles[MAX_OBSTACLES];
 
 // Timing
-// 1 neighbor: 800us
+// 0 neighbor: 2.6ms
+// 1 neighbor: 3.4ms
+// 2 neighbor: 4.2ms
+// 3 neighbor: 5.0ms
+
 
 // private functions
 static void globalToLocalPolicyTask(void * prm);
@@ -74,11 +78,11 @@ void globalToLocalPolicyInit(void)
               G2L_POLICY_TASK_STACKSIZE, NULL, G2L_POLICY_TASK_PRI, NULL);
 }
 
-void globalToLocalPolicyGet(const struct vec* goal, struct vec* vel)
+void globalToLocalPolicyGet(const struct vec* goal, struct vec* acc)
 {
   if (enableNN > 0) {
     last_goal = *goal;
-    *vel = vel_desired;
+    *acc = acc_desired;
   }
 }
 
@@ -89,7 +93,7 @@ static void recompute(void)
   if (enableNN > 0) {
 
     // get my current position
-    struct vec pos = locSrvGetStateByCfId(my_id)->pos;
+    struct allCfState* state = locSrvGetStateByCfId(my_id);
 
     // start NN evaluation
     nn_reset();
@@ -107,9 +111,10 @@ static void recompute(void)
           && otherState->id != 0
           && xTaskGetTickCount() - otherState->timestamp < 500) {
 
-        struct vec dpos = vsub(otherState->pos, pos);
+        struct vec dpos = vsub(otherState->pos, state->pos);
+        struct vec dvel = vsub(otherState->vel, state->vel);
 
-        float input[2] = {dpos.x, dpos.y};
+        float input[4] = {dpos.x, dpos.y, dvel.x, dvel.y};
         nn_add_neighbor(input);
       }
     }
@@ -117,21 +122,21 @@ static void recompute(void)
     // add all obstacles
     for (int i = 0; i < MAX_OBSTACLES; ++i) {
       if (obstacles[i].enabled) {
-        struct vec dpos = vsub(mkvec(obstacles[i].x,obstacles[i].y,0), pos);
-        float input[2] = {dpos.x, dpos.y};
+        struct vec dpos = vsub(mkvec(obstacles[i].x,obstacles[i].y,0), state->pos);
+        float input[4] = {dpos.x, dpos.y, -state->vel.x, -state->vel.y};
         nn_add_obstacle(input);
       }
     }
 
-    struct vec dpos = vsub(last_goal, pos);
-    float input[2] = {dpos.x, dpos.y};
-    const float* vel = nn_eval(input);
+    struct vec dpos = vsub(last_goal, state->pos);
+    float input[4] = {dpos.x, dpos.y, -state->vel.x, -state->vel.y};
+    const float* acc = nn_eval(input);
 
-    vel_desired.x = scale * vel[0];
-    vel_desired.y = scale * vel[1];
-    vel_desired.z = 0;
+    acc_desired.x = scale * acc[0];
+    acc_desired.y = scale * acc[1];
+    acc_desired.z = 0;
   } else {
-    vel_desired = vzero();
+    acc_desired = vzero();
   }
 
   ticks = usecTimestamp() - startTime;
@@ -166,7 +171,7 @@ PARAM_ADD(PARAM_UINT8, obs2en, &obstacles[2].enabled)
 PARAM_GROUP_STOP(g2lp)
 
 LOG_GROUP_START(g2lp)
-LOG_ADD(LOG_FLOAT, vx, &vel_desired.x)
-LOG_ADD(LOG_FLOAT, vy, &vel_desired.y)
+LOG_ADD(LOG_FLOAT, ax, &acc_desired.x)
+LOG_ADD(LOG_FLOAT, ay, &acc_desired.y)
 LOG_ADD(LOG_UINT32, ticks, &ticks)
 LOG_GROUP_STOP(g2lp)
