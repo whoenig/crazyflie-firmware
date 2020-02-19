@@ -21,17 +21,17 @@ static float deepset_sum_obstacle[16];
 static float robot_radius = 0.15; // m
 static float max_v = 0.5; //0.5; // m/s
 static float max_a = 2.0;
-static float pi_max = 0.05;
+static float pi_max = 2.0;
 
 // Barrier stuff
 static float barrier_grad_phi[2];
 static float barrier_grad_phi_dot[2];
 static float minp;
-static float deltaR = 0.5 * 0.5 / (2 * 2.0) + 2 * 0.5 * 0.05;
+static float deltaR = 2*0.5*0.05+0.5*0.5/(2*2.0);
 static float Rsense = 3.0;
-static float barrier_kp = 0.01;//0.005;
-static float barrier_kv = 2.0;//0.005;
-static float barrier_kh = 0.5; 
+static float barrier_kp = 0.025;
+static float barrier_kv = 1.0;
+static float barrier_kh = 0.8; 
 
 static float relu(float num) {
 	if (num > 0) {
