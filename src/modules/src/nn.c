@@ -18,16 +18,20 @@ static float deepset_sum_obstacle[16];
 
 // static const float b_gamma = 0.1;
 // static const float b_exph = 1.0;
-static const float robot_radius = 0.15; // m
-static float max_v = 0.5; // m/s
-static float pi_max = 0.9f * 0.5f;
+static float robot_radius = 0.15; // m
+static float max_v = 0.5; //0.5; // m/s
+static float max_a = 2.0;
+static float pi_max = 0.05;
 
 // Barrier stuff
 static float barrier_grad_phi[2];
-static bool barrier_alpha_condition;
-static float deltaR = 0.5 * 0.05;
-static const float Rsense = 3.0;
-static float barrier_gamma = 0.005;
+static float barrier_grad_phi_dot[2];
+static float minp;
+static float deltaR = 0.5 * 0.5 / (2 * 2.0) + 2 * 0.5 * 0.05;
+static float Rsense = 3.0;
+static float barrier_kp = 0.01;//0.005;
+static float barrier_kv = 2.0;//0.005;
+static float barrier_kh = 0.5; 
 
 static float relu(float num) {
 	if (num > 0) {
@@ -88,13 +92,6 @@ static const float* psi(const float input[]) {
 	layer(64, 64, temp1, weights_psi.layers_1_weight, weights_psi.layers_1_bias, temp2, 1);
 	layer(64, 2, temp2, weights_psi.layers_2_weight, weights_psi.layers_2_bias, temp1, 0);
 
-	// // scaling part
-	// const float psi_min = -0.5;
-	// const float psi_max = 0.5;
-	// for (int i = 0; i < 2; ++i) {
-	// 	temp1[i] = (tanhf(temp1[i]) + 1.0f) / 2.0f * ((psi_max - psi_min) + psi_min);
-	// }
-
 	return temp1;
 }
 
@@ -108,25 +105,6 @@ static float clip(float value, float min, float max) {
 	return value;
 }
 
-// static void barrier(float x, float y, float D, float* vx, float *vy) {
-// 	float normP = sqrtf(x*x + y*y);
-// 	float H = normP - D;
-
-// 	float factor = powf(H, -b_exph) / normP;
-
-// 	*vx = b_gamma * factor * x;
-// 	*vy = b_gamma * factor * y;
-// }
-
-// static void APF(float* vel)
-// {
-// 	if (isfinite(closest_dist)) {
-// 		float vx, vy;
-// 		barrier(closest[0], closest[1], min_distance, &vx, &vy);
-// 		vel[0] -= vx;
-// 		vel[1] -= vy;
-// 	}
-// }
 
 void nn_reset()
 {
@@ -134,7 +112,8 @@ void nn_reset()
 	memset(deepset_sum_obstacle, 0, sizeof(deepset_sum_obstacle));
 
 	memset(barrier_grad_phi, 0, sizeof(barrier_grad_phi));
-	barrier_alpha_condition = false;
+	memset(barrier_grad_phi_dot, 0, sizeof(barrier_grad_phi_dot));
+	minp = 100.0;
 }
 
 void nn_add_neighbor(const float input[4])
@@ -158,8 +137,20 @@ void nn_add_neighbor(const float input[4])
 		barrier_grad_phi[0] += x / denominator;
 		barrier_grad_phi[1] += y / denominator;
 
-		if (dist < Rsafe + deltaR) {
-			barrier_alpha_condition = true;
+		const float ptv = x*input[2] + y*input[3];
+		const float d1 = dist*(dist - Rsafe);
+		const float d2 = powf(dist,3)*(dist - Rsafe);
+		const float d3 = powf(dist,2)*powf(dist - Rsafe,2);
+
+		barrier_grad_phi_dot[0] += input[2]/d1 - x*ptv/d2 - x*ptv/d3;
+		barrier_grad_phi_dot[1] += input[3]/d1 - y*ptv/d2 - y*ptv/d3;
+
+		// if (dist < Rsafe + deltaR) {
+		// 	barrier_alpha_condition = true;
+		// }
+
+		if (dist < minp) {
+			minp = dist;
 		}
 	}
 }
@@ -184,9 +175,22 @@ void nn_add_obstacle(const float input[4])
 		barrier_grad_phi[0] += closest_x / denominator;
 		barrier_grad_phi[1] += closest_y / denominator;
 
-		if (dist < Rsafe + deltaR) {
-			barrier_alpha_condition = true;
+		const float ptv = closest_x*input[2] + closest_y*input[3];
+		const float d1 = dist*(dist - Rsafe);
+		const float d2 = powf(dist,3)*(dist - Rsafe);
+		const float d3 = powf(dist,2)*powf(dist - Rsafe,2);
+
+		barrier_grad_phi_dot[0] += input[2]/d1 - closest_x*ptv/d2 - closest_x*ptv/d3;
+		barrier_grad_phi_dot[1] += input[3]/d1 - closest_y*ptv/d2 - closest_y*ptv/d3;
+
+		// if (dist < Rsafe + deltaR) {
+		// 	barrier_alpha_condition = true;
+		// }
+
+		if (dist < minp) {
+			minp = dist;
 		}
+				
 	}
 }
 
@@ -204,62 +208,81 @@ const float* nn_eval(const float goal[4])
 
 	const float* empty = psi(pi_input);
 
-	// // fun hack: goToGoal policy
-	// const float kp = 1.0;
-	// temp1[0] = kp*goal[0];
-	// temp1[1] = kp*goal[1];
+	// fun hack: goToGoal policy
+	// const float kp = 0.5;
+	// const float kv = 2.0; 
+	// temp1[0] = kp*goal[0] + kv*goal[2];
+	// temp1[1] = kp*goal[1] + kv*goal[3];
 
-	// // for barrier, we need to scale empty to pi_max:
-	// float empty_norm = sqrtf(powf(empty[0], 2) + powf(empty[1], 2));
-	// if (empty_norm > 0) {
-	// 	const float scale = fminf(1.0f, pi_max / empty_norm);
-	// 	temp1[0] = scale * empty[0];
-	// 	temp1[1] = scale * empty[1];
-	// } else {
-	// 	temp1[0] = empty[0];
-	// 	temp1[1] = empty[1];
-	// }
 
-	// // Barrier:
-	// float b[2] = {0, 0};
-	// b[0] = -barrier_gamma * barrier_grad_phi[0];
-	// b[1] = -barrier_gamma * barrier_grad_phi[1];
+	// 
+	float pi[2] = {empty[0],empty[1]};
+	float u[2] = {0,0};
 
-	// float alpha = 1.0;
-	// if (barrier_alpha_condition) {
-	// 	float bnorm = sqrtf(powf(b[0], 2) + powf(b[1], 2));
-	// 	float pinorm = sqrtf(powf(temp1[0], 2) + powf(temp1[1], 2));
-	// 	if (pinorm > 0) {
-	// 		alpha = fminf(1.0f, bnorm / pinorm);
-	// 	}
-	// }
+	// Scale empty to pi_max:
+	float pi_norm = sqrtf(powf(pi[0], 2) + powf(pi[1], 2));
+	if (pi_norm > 0) {
+		const float scale = fminf(1.0f, pi_max / pi_norm);
+		pi[0] = scale * pi[0];
+		pi[1] = scale * pi[1];
+	} 
 
-	// temp1[0] = b[0] + alpha * temp1[0];
-	// temp1[1] = b[1] + alpha * temp1[1];
+	// Velocity
+	float v[2] = {-goal[2], -goal[3]};
 
-	// // scaling
-	// float temp1_norm = sqrtf(powf(temp1[0], 2) + powf(temp1[1], 2));
-	// float alpha2 = 1.0;
-	// if (temp1_norm > 0) {
-	// 	alpha2 = fminf(1.0f, max_v / temp1_norm);
-	// }
-	// temp1[0] *= alpha2;
-	// temp1[1] *= alpha2;
+	// Barrier:
+	float b[2] = {0, 0};
+	b[0] = -barrier_kv * (v[0] + barrier_kp * barrier_grad_phi[0]) - barrier_kp * barrier_grad_phi[0] - barrier_kp * barrier_grad_phi_dot[0];
+	b[1] = -barrier_kv * (v[1] + barrier_kp * barrier_grad_phi[1]) - barrier_kp * barrier_grad_phi[1] - barrier_kp * barrier_grad_phi_dot[1];
 
-	// APF(temp1);
+	// Complementary Filter
+	float grad_phi_norm = powf(barrier_grad_phi[0], 2) + powf(barrier_grad_phi[1], 2);
+	float vmk_norm = powf(v[0] + barrier_kp * barrier_grad_phi[0], 2) + powf(v[1] + barrier_kp * barrier_grad_phi[1], 2);
+	float a1 = barrier_kv * vmk_norm + barrier_kp * barrier_kp * grad_phi_norm;
+	float a2_1 = \
+		barrier_kp*(v[0]*barrier_grad_phi[0] + v[1]*barrier_grad_phi[1]);
+	float a2_2 = \
+		(v[0] + barrier_kp*barrier_grad_phi[0]) * (pi[0] + barrier_kp*barrier_grad_phi_dot[0]) + \
+		(v[1] + barrier_kp*barrier_grad_phi[1]) * (pi[1] + barrier_kp*barrier_grad_phi_dot[1]);
+	float dr = deltaR / (Rsense - robot_radius);
+	float minh = ((minp - robot_radius - deltaR) / (Rsense - robot_radius)) / dr;
+	
+	float alpha = 1.0;
+	if (fabsf(a2_1 + a2_2) > 0) {
+		float x = barrier_kh*minh + logf( a1 / fabsf(a2_1 + a2_2)); 
+		alpha = 1.0f / (1.0f + expf(-1.0f * x ));
+	}
 
-	// float inv_alpha = fmaxf(fabsf(temp1[0]), fabsf(temp1[1])) / max_v;
-	// inv_alpha = fmaxf(inv_alpha, 1.0);
-	// temp1[0] /= inv_alpha;
-	// temp1[1] /= inv_alpha;
+	// Composite Control Law (temp1 = pi -> temp1 = u)
+	u[0] = (1 - alpha) * b[0] + alpha * pi[0];
+	u[1] = (1 - alpha) * b[1] + alpha * pi[1];
+
+	// final acceleration scaling
+	float u_norm = sqrtf(powf(u[0], 2) + powf(u[1], 2));
+	float alpha2 = 1.0;
+	if (u_norm > 0) {
+		alpha2 = fminf(1.0f, max_a / u_norm);
+	}
+	u[0] *= alpha2;
+	u[1] *= alpha2;
+
+	memcpy(temp1, u, 2 * sizeof(float));
 
 	return temp1;
 }
 
+float nn_get_Rsense(void)
+{
+	return Rsense;
+}
+
 PARAM_GROUP_START(nn)
 PARAM_ADD(PARAM_FLOAT, max_v, &max_v)
+PARAM_ADD(PARAM_FLOAT, max_a, &max_a)
 PARAM_ADD(PARAM_FLOAT, pi_max, &pi_max)
 PARAM_ADD(PARAM_FLOAT, deltaR, &deltaR)
-PARAM_ADD(PARAM_FLOAT, gamma, &barrier_gamma)
-
+PARAM_ADD(PARAM_FLOAT, Rsense, &Rsense)
+PARAM_ADD(PARAM_FLOAT, barrier_kp, &barrier_kp)
+PARAM_ADD(PARAM_FLOAT, barrier_kv, &barrier_kv)
+PARAM_ADD(PARAM_FLOAT, barrier_kh, &barrier_kh)
 PARAM_GROUP_STOP(nn)

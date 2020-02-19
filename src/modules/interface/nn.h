@@ -10,4 +10,6 @@ void nn_add_obstacle(const float input[4]);
 
 const float* nn_eval(const float input[4]);
 
+float nn_get_Rsense(void);
+
 #endif

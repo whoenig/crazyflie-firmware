@@ -124,7 +124,12 @@ static struct traj_eval artificial_potential(struct planner *p, struct traj_eval
     // propagate double integrator
     const float dt = t - p->last_t;
     p->apPos = vadd(p->apPos, vscl(dt, p->apVel));
-    p->apVel = vclampabs(vadd(p->apVel, vscl(dt, acc)), vrepeat(max_v));
+    p->apVel = vadd(p->apVel, vscl(dt, acc));
+    // scale the velocity, if needed
+    float v = vmag(p->apVel);
+    if (v > max_v) {
+        p->apVel = vscl(max_v / v, p->apVel);
+    }
     p->last_t = t;
 
     struct traj_eval ev;
