@@ -155,7 +155,7 @@ static void recompute(void)
         struct vec dpos = vsub(mkvec(obstacles[i].x,obstacles[i].y,0), state->pos);
         float dist = sqrtf(dpos.x * dpos.x + dpos.y * dpos.y);
         if (dist < Rsense) {
-          float input[4] = {dpos.x, dpos.y, -state->vel.x, -state->vel.y};
+          float input[4] = {dpos.x, dpos.y, state->vel.x, state->vel.y};
           nn_add_obstacle(input);
         }
       }

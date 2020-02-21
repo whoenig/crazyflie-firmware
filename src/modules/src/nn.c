@@ -1,5 +1,5 @@
 #include <string.h> // memset, memcpy
-#include <math.h> //tanhf
+#include <math.h> //tanhf, exp 
 #include <stdbool.h>
 
 #include "nn.h"
@@ -21,17 +21,20 @@ static float deepset_sum_obstacle[16];
 static float robot_radius = 0.15; // m
 static float max_v = 0.5; //0.5; // m/s
 static float max_a = 2.0;
-static float pi_max = 2.0;
 
 // Barrier stuff
 static float barrier_grad_phi[2];
 static float barrier_grad_phi_dot[2];
 static float minp;
-static float deltaR = 2*0.5*0.05+0.5*0.5/(2*2.0);
+// static bool barrier_alpha_condition;
+static float deltaR = 2*(0.5*0.05 + 0.05*0.05/(2*2.0));
 static float Rsense = 3.0;
-static float barrier_kp = 0.025;
-static float barrier_kv = 1.0;
-static float barrier_kh = 0.8; 
+// static const float barrier_gamma = 0.01;//0.005;
+static float barrier_kp = 0.01;//0.005;
+static float barrier_kv = 1.0;//0.005;
+// static const float barrier_kh = 0.5; 
+static float epsilon = 0.01;
+static float pi_max = 0.2;
 
 static float relu(float num) {
 	if (num > 0) {
@@ -236,6 +239,7 @@ const float* nn_eval(const float goal[4])
 	b[1] = -barrier_kv * (v[1] + barrier_kp * barrier_grad_phi[1]) - barrier_kp * barrier_grad_phi[1] - barrier_kp * barrier_grad_phi_dot[1];
 
 	// Complementary Filter
+	/*
 	float grad_phi_norm = powf(barrier_grad_phi[0], 2) + powf(barrier_grad_phi[1], 2);
 	float vmk_norm = powf(v[0] + barrier_kp * barrier_grad_phi[0], 2) + powf(v[1] + barrier_kp * barrier_grad_phi[1], 2);
 	float a1 = barrier_kv * vmk_norm + barrier_kp * barrier_kp * grad_phi_norm;
@@ -246,16 +250,32 @@ const float* nn_eval(const float goal[4])
 		(v[1] + barrier_kp*barrier_grad_phi[1]) * (pi[1] + barrier_kp*barrier_grad_phi_dot[1]);
 	float dr = deltaR / (Rsense - robot_radius);
 	float minh = ((minp - robot_radius - deltaR) / (Rsense - robot_radius)) / dr;
+	*/
+
+	// Complementary Filter v 2 
+	float grad_phi_norm = powf(barrier_grad_phi[0], 2) + powf(barrier_grad_phi[1], 2);
+	float vmk_norm = powf(v[0] + barrier_kp * barrier_grad_phi[0], 2) + powf(v[1] + barrier_kp * barrier_grad_phi[1], 2);
+	float a1 = barrier_kv * vmk_norm + barrier_kp * barrier_kp * grad_phi_norm;
+	float a2_1 = \
+		barrier_kp*(v[0]*barrier_grad_phi[0] + v[1]*barrier_grad_phi[1]);
+	float a2_2 = \
+		(v[0] + barrier_kp*barrier_grad_phi[0]) * (pi[0] + barrier_kp*barrier_grad_phi_dot[0]) + \
+		(v[1] + barrier_kp*barrier_grad_phi[1]) * (pi[1] + barrier_kp*barrier_grad_phi_dot[1]);
+	float a2 = a2_1 + a2_2;
+	float minh = minp - robot_radius - deltaR;
 	
-	float alpha = 1.0;
-	if (fabsf(a2_1 + a2_2) > 0) {
-		float x = barrier_kh*minh + logf( a1 / fabsf(a2_1 + a2_2)); 
-		alpha = 1.0f / (1.0f + expf(-1.0f * x ));
+	float alpha = 1.0f - epsilon;
+	if (minh < 0.0f && fabsf(a2) > 0.0f && a1/(a1+fabsf(a2)) < 1.0f - epsilon) {
+		alpha = a1/(a1+fabsf(a2));
 	}
 
 	// Composite Control Law (temp1 = pi -> temp1 = u)
-	u[0] = (1 - alpha) * b[0] + alpha * pi[0];
-	u[1] = (1 - alpha) * b[1] + alpha * pi[1];
+	// alpha = 1.;
+	// b[0] = 0.;
+	// b[1] = 0.;
+
+	u[0] = (1.0f - alpha) * b[0] + alpha * pi[0];
+	u[1] = (1.0f - alpha) * b[1] + alpha * pi[1];
 
 	// final acceleration scaling
 	float u_norm = sqrtf(powf(u[0], 2) + powf(u[1], 2));
@@ -284,5 +304,5 @@ PARAM_ADD(PARAM_FLOAT, deltaR, &deltaR)
 PARAM_ADD(PARAM_FLOAT, Rsense, &Rsense)
 PARAM_ADD(PARAM_FLOAT, barrier_kp, &barrier_kp)
 PARAM_ADD(PARAM_FLOAT, barrier_kv, &barrier_kv)
-PARAM_ADD(PARAM_FLOAT, barrier_kh, &barrier_kh)
+// PARAM_ADD(PARAM_FLOAT, barrier_kh, &barrier_kh)
 PARAM_GROUP_STOP(nn)
