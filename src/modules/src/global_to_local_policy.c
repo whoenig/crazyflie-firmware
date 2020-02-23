@@ -46,6 +46,8 @@ static uint8_t num_neighbors = 6;
 static uint8_t my_id;
 
 static struct vec last_goal;
+static struct vec last_pos;
+static struct vec last_vel;
 static struct vec acc_desired;
 
 struct obstacle {
@@ -88,9 +90,11 @@ void globalToLocalPolicyInit(void)
               G2L_POLICY_TASK_STACKSIZE, NULL, G2L_POLICY_TASK_PRI, NULL);
 }
 
-void globalToLocalPolicyGet(const struct vec* goal, struct vec* acc)
+void globalToLocalPolicyGet(const struct vec* pos, const struct vec* vel, const struct vec* goal, struct vec* acc)
 {
   if (enableNN > 0) {
+    last_pos = *pos;
+    last_vel = *vel;
     last_goal = *goal;
     *acc = acc_desired;
   }
@@ -101,9 +105,6 @@ static void recompute(void)
   uint64_t startTime = usecTimestamp();
 
   if (enableNN > 0) {
-
-    // get my current position
-    struct allCfState* state = locSrvGetStateByCfId(my_id);
 
     // start NN evaluation
     nn_reset();
@@ -123,7 +124,7 @@ static void recompute(void)
           && otherState->id != 0
           && xTaskGetTickCount() - otherState->timestamp < 500) {
 
-        struct vec dpos = vsub(otherState->pos, state->pos);
+        struct vec dpos = vsub(otherState->pos, last_pos);
         float dist = sqrtf(dpos.x * dpos.x + dpos.y * dpos.y);
         if (dist < Rsense) {
           dist_idx_array[num_neighbors_found].dist = dist;
@@ -142,8 +143,8 @@ static void recompute(void)
     // add only closest neighbors
     for (uint8_t idx = 0; idx < num_neighbors && idx < num_neighbors_found; ++idx) {
       struct allCfState* otherState = locSrvGetStateByIdx(dist_idx_array[idx].idx);
-      struct vec dpos = vsub(otherState->pos, state->pos);
-      struct vec dvel = vsub(otherState->vel, state->vel);
+      struct vec dpos = vsub(otherState->pos, last_pos);
+      struct vec dvel = vsub(otherState->vel, last_vel);
       float input[4] = {dpos.x, dpos.y, dvel.x, dvel.y};
       nn_add_neighbor(input);
     }
@@ -152,22 +153,22 @@ static void recompute(void)
     // TODO: technically we should sort here, too, but currently MAX_OBSTACLES < max_neighbors
     for (int i = 0; i < MAX_OBSTACLES; ++i) {
       if (obstacles[i].enabled) {
-        struct vec dpos = vsub(mkvec(obstacles[i].x,obstacles[i].y,0), state->pos);
+        struct vec dpos = vsub(mkvec(obstacles[i].x,obstacles[i].y,0), last_pos);
         float dist = sqrtf(dpos.x * dpos.x + dpos.y * dpos.y);
         if (dist < Rsense) {
-          float input[4] = {dpos.x, dpos.y, state->vel.x, state->vel.y};
+          float input[4] = {dpos.x, dpos.y, last_vel.x, last_vel.y};
           nn_add_obstacle(input);
         }
       }
     }
 
     // compute and set normalized goal
-    struct vec dpos = vsub(last_goal, state->pos);
+    struct vec dpos = vsub(last_goal, last_pos);
     float dist = sqrtf(dpos.x * dpos.x + dpos.y * dpos.y);
     if (dist > 0 && dist > Rsense) {
       dpos = vscl(Rsense / dist, dpos);
     }
-    float input[4] = {dpos.x, dpos.y, -state->vel.x, -state->vel.y};
+    float input[4] = {dpos.x, dpos.y, -last_vel.x, -last_vel.y};
     const float* acc = nn_eval(input);
 
     acc_desired.x = scale * acc[0];

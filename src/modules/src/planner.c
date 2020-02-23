@@ -119,7 +119,7 @@ static struct traj_eval artificial_potential(struct planner *p, struct traj_eval
   else if (enableAP == 2) {
     // get latest acceleration command
     struct vec acc;
-    globalToLocalPolicyGet(&input.pos, &acc);
+    globalToLocalPolicyGet(&p->apPos, &p->apVel, &input.pos, &acc);
 
     // propagate double integrator
     const float dt = t - p->last_t;

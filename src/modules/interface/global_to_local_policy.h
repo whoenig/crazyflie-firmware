@@ -27,6 +27,10 @@
 
 void globalToLocalPolicyInit(void);
 
-void globalToLocalPolicyGet(const struct vec* goal, struct vec* acc);
+void globalToLocalPolicyGet(
+	const struct vec* pos,	/* current (desired) position */
+	const struct vec* vel,  /* current (desired) velocity */
+	const struct vec* goal, /* current goal position */
+	struct vec* acc);
 
 #endif //__GLOBAL_TO_LOCAL_POLICY_H__
